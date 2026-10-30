@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Waass Mod Manager</title>
+<!-- 图标只给一个 .ico：它内部有 16~256 十档真图，外壳能按需要精确挑。
+     不额外挂单尺寸 PNG —— 一旦页面上有 sizes="16x16" 的条目，
+     外壳就可能拿那张 16px 的小图去撑任务栏，放大后必然发虚。 -->
+<link rel="icon" type="image/x-icon" href="/static/icon.ico?v=6">
+<link rel="shortcut icon" href="/static/icon.ico?v=6">
+<!-- 明暗必须在样式表之前定下来，否则深色系统下会先闪一帧白底。
+     规则和 app.js 里的 resolvedTheme 一致：没存过就跟随系统。 -->
+<script>
+(function () {
+  try {
+    // 1.2.3：没存过任何选择时默认深色（主视觉是深色底 + 金色）。
+    var t = localStorage.getItem('waass.theme') || 'dark';
+    // 原始选择单独记一份：三态图标要靠它，光看解析后的明暗分不出「跟随系统」。
+    document.documentElement.dataset.themeMode =
+      (t === 'light' || t === 'dark') ? t : 'auto';
+    if (t === 'auto' || (t !== 'light' && t !== 'dark')) {
+      t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    document.documentElement.dataset.theme = t;
+  } catch (e) {
+    document.documentElement.dataset.theme = 'dark';
+    document.documentElement.dataset.themeMode = 'dark';
+  }
+})();
+</script>
+<link rel="stylesheet" href="/static/style.css">
+<script>window.__WAASS_TOKEN__ = "%%WAASS_TOKEN%%";</script>
+</head>
+<body data-locked="0">
+
+<header class="topbar">
+  <div class="brand">
+    <!-- 1.2.3：品牌区换成主视觉图标 + 金色字标。图标用 64px 源缩到 26px，
+         不用 16px 那张 —— 小图放大必然发虚。 -->
+    <img class="brand-mark" src="/static/icon-64.png" alt="Waass" width="26" height="26">
+    <div class="brand-text">
+      <strong>Waass</strong>
+      <span>Mod Manager</span>
+    </div>
+  </div>
+
+  <div class="search">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5L14 14"></path></svg>
+    <input id="q" type="text" placeholder="搜索模组、作者或 Nexus ID" autocomplete="off" spellcheck="false">
+  </div>
+
+  <div class="topbar-actions">
+    <!-- 「N 个可更新」以前一直挂着、也没法关，看久了很碍眼。
+         现在是个小药丸：点文字看是哪些模组，点 × 忽略「这一批」
+         （名单真的变了它还会回来，记录走 data/ui.json，和下面提示条同一个指纹）。
+         外层不是按钮 —— 按钮里套按钮是无效 HTML，点击事件会串。 -->
+    <span class="chip chip-danger chip-upd" id="updPill" hidden>
+      <button class="chip-upd-go" id="btnUpdates" title="看是哪几个模组有新版本">0 个可更新</button>
+      <button class="chip-x" id="btnUpdatesX" title="忽略这一批，等有新版本再提醒">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.2 5.2l5.6 5.6M10.8 5.2l-5.6 5.6"></path></svg>
+      </button>
+    </span>
+    <!-- 随时能去 Nexus 逛一圈。走服务端 os.startfile，用系统默认浏览器打开 ——
+         页面里 target=_blank 会被 Edge 的 --app 窗口接住，开成一个没有地址栏的新窗口。 -->
+    <button class="btn btn-nexus" id="btnNexus" title="在浏览器里打开 Nexus Mods 的巫师 3 专区">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.4 3.2H3.6a.8.8 0 0 0-.8.8v8.4a.8.8 0 0 0 .8.8h8.4a.8.8 0 0 0 .8-.8V9.6"></path><path d="M9.4 2.8h3.8v3.8"></path><path d="M13.2 2.8 7.6 8.4"></path></svg>
+      Nexus
+    </button>
+    <button class="btn btn-primary" id="btnImport">导入压缩包</button>
+    <button class="icon-btn" id="btnSettings" title="设置">
+      <svg viewBox="0 0 24 24" stroke-width="1.7"><path d="M12 17.2a5.2 5.2 0 1 0 0-10.4 5.2 5.2 0 0 0 0 10.4Z"></path><path d="M19.1 14.7a1.6 1.6 0 0 0 .32 1.77l.06.06a1.95 1.95 0 0 1-2.76 2.76l-.06-.06a1.6 1.6 0 0 0-1.77-.32 1.6 1.6 0 0 0-.97 1.47v.17a1.95 1.95 0 1 1-3.9 0v-.09a1.6 1.6 0 0 0-1.04-1.47 1.6 1.6 0 0 0-1.77.32l-.06.06a1.95 1.95 0 1 1-2.76-2.76l.06-.06a1.6 1.6 0 0 0 .32-1.77 1.6 1.6 0 0 0-1.47-.97h-.17a1.95 1.95 0 0 1 0-3.9h.09a1.6 1.6 0 0 0 1.47-1.04 1.6 1.6 0 0 0-.32-1.77l-.06-.06a1.95 1.95 0 0 1 2.76-2.76l.06.06a1.6 1.6 0 0 0 1.77.32h.08a1.6 1.6 0 0 0 .97-1.47v-.17a1.95 1.95 0 0 1 3.9 0v.09a1.6 1.6 0 0 0 .97 1.47 1.6 1.6 0 0 0 1.77-.32l.06-.06a1.95 1.95 0 0 1 2.76 2.76l-.06.06a1.6 1.6 0 0 0-.32 1.77v.08a1.6 1.6 0 0 0 1.47.97h.17a1.95 1.95 0 0 1 0 3.9h-.09a1.6 1.6 0 0 0-1.47.97Z"></path></svg>
+    </button>
+    <button class="icon-btn" id="btnRefresh" title="重新扫描">
+      <svg viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"></path><path d="M13.6 2.2v2.9h-2.9"></path></svg>
+    </button>
+    <button class="icon-btn" id="btnTheme" title="切换明暗">
+      <!-- 三态各一个图标。跟随系统 = 拿日间图标切成两半：左半实心（"黑"）、
+           右半只描边（"亮"），光线只留右边那三根 —— 一眼看出「一半跟白天走、
+           一半跟黑夜走」。以前 auto 直接复用当前解析出的日/月图标，看着像只有两态。 -->
+      <svg class="ic-auto" viewBox="0 0 16 16">
+        <path d="M8 3.8a4.2 4.2 0 0 0 0 8.4Z" fill="currentColor" stroke="none"></path>
+        <path d="M8 3.8a4.2 4.2 0 0 1 0 8.4"></path>
+      </svg>
+      <svg class="ic-moon" viewBox="0 0 16 16"><path d="M13.4 9.7A5.9 5.9 0 0 1 6.3 2.6a5.6 5.6 0 1 0 7.1 7.1Z"></path></svg>
+      <svg class="ic-sun" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3.1"></circle><path d="M8 1.6v1.5M8 12.9v1.5M1.6 8h1.5M12.9 8h1.5M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M12.5 3.5l-1.1 1.1M4.6 11.4l-1.1 1.1"></path></svg>
+    </button>
+  </div>
+</header>
+
+<div class="shell">
+
+  <aside class="sidebar">
+    <nav id="navGroups" class="side-nav"></nav>
+    <div class="side-title side-title-gap">
+      <span>我的分组</span>
+      <button class="side-add" id="btnNewGroup" title="新建分组">+</button>
+    </div>
+    <nav id="navMine" class="side-nav"></nav>
+    <div class="side-title side-title-gap">状态</div>
+    <nav id="navStatus" class="side-nav"></nav>
+    <div class="side-title side-title-gap">工具</div>
+    <nav class="side-nav">
+      <button class="nav-item nav-item-action" id="navOrder"><span>加载顺序</span><em>›</em></button>
+      <button class="nav-item nav-item-action" id="navTrack"><span>检查 MOD 更新</span><em>›</em></button>
+      <button class="nav-item nav-item-action" id="navConflicts"><span>冲突检查</span><em>›</em></button>
+      <button class="nav-item nav-item-action" id="navLocalize"><span>汉化</span><em>›</em></button>
+      <button class="nav-item nav-item-action" id="navSaves"><span>存档备份</span><em>›</em></button>
+      <button class="nav-item nav-item-action" id="navSettings"><span>设置</span><em>›</em></button>
+    </nav>
+    <div class="side-foot">
+      <div class="path-label">游戏目录</div>
+      <div class="path-line">
+        <div class="path-value" id="gamePath">未设置</div>
+        <!-- 游戏版本：从 witcher3.exe 里读出来的（主菜单角标上那个 5.01c）。
+             读不到就整块不显示 —— 宁可空着，也不显示一个对不上号的版本。 -->
+        <span class="path-ver" id="gameVer" hidden></span>
+      </div>
+      <button class="link-btn" id="btnPickGame">更改</button>
+    </div>
+  </aside>
+
+  <main class="content">
+    <div class="content-head">
+      <div class="content-title">
+        <h1 id="viewTitle">全部模组</h1>
+        <span class="muted" id="viewMeta"></span>
+      </div>
+      <div class="content-tools">
+        <!-- 批量：一次开/关好几个模组。19 个模组用不上「智能筛选」，
+             但「把这一批外观 mod 全关掉看看」是常事。 -->
+        <button class="btn" id="btnPick" title="一次选中多个模组，一起启用或禁用">批量选择</button>
+        <!-- 这个下拉只管「屏幕上怎么排」，不管游戏里谁先加载。
+             两者原来共用一个词，用户切成按名称之后拖卡片毫无反应也没有解释。 -->
+        <select id="sortBy" class="select" title="只影响这里的显示顺序；要改游戏加载顺序点左侧「加载顺序」">
+          <option value="priority">按加载顺序</option>
+          <option value="name">按名称</option>
+          <option value="size">按体积</option>
+          <option value="mtime">按安装时间</option>
+          <option value="category">按分类</option>
+        </select>
+        <div class="seg" id="viewSeg">
+          <button data-view="grid" class="is-on" title="卡片">
+            <svg viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5"></rect><rect x="9" y="2" width="5" height="5"></rect><rect x="2" y="9" width="5" height="5"></rect><rect x="9" y="9" width="5" height="5"></rect></svg>
+          </button>
+          <button data-view="list" title="列表">
+            <svg viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h12"></path></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="lockBar" class="lockbar" hidden></div>
+    <div id="warnBar" class="warnbar" hidden></div>
+    <!-- 启动自动同步的结果：有可更新版本时才亮，忽略过的不再出现 -->
+    <div id="syncBar" class="syncbar" hidden></div>
+
+    <!-- 批量模式的操作条。放这里而不是浮在底部：
+         浮层会盖住最后一行卡片，而选中的往往正是要上下翻着对比的那几个。 -->
+    <div id="pickBar" class="pickbar" hidden>
+      <span class="pickbar-n">已选 <b id="pickCount">0</b> 个</span>
+      <span class="pickbar-hint">点卡片就是选中／取消</span>
+      <span class="st-spacer"></span>
+      <button class="btn btn-sm" id="pickAll">全选</button>
+      <button class="btn btn-sm" id="pickOn">启用</button>
+      <button class="btn btn-sm" id="pickOff">禁用</button>
+      <button class="btn btn-sm btn-ghost" id="pickDone">退出</button>
+    </div>
+
+    <div id="mods" class="mods-grid" data-view="grid"></div>
+
+    <div id="empty" class="empty" hidden>
+      <div class="empty-title" id="emptyTitle">没有匹配的模组</div>
+      <div class="empty-sub" id="emptySub">换个关键词试试。</div>
+      <div class="empty-actions">
+        <!-- 没有游戏目录时这两个是唯一有意义的动作。以前的空态只会说
+             「没有匹配的模组」，而新用户第一次打开看到的正是这个。 -->
+        <button class="btn btn-sm" id="emptyPickGame" hidden>选择游戏目录</button>
+        <button class="btn btn-sm btn-ghost" id="emptyRedetect" hidden>重新查找</button>
+        <button class="btn btn-sm" id="emptyClear" hidden>清空搜索</button>
+        <button class="btn btn-sm" id="emptyAll" hidden>回到全部模组</button>
+        <button class="btn btn-sm btn-ghost" id="emptyNexus" hidden>去 Nexus 搜这个名字</button>
+      </div>
+    </div>
+  </main>
+
+  <aside class="details" id="details">
+    <div class="details-empty" id="detailsEmpty">
+      <div class="details-empty-icon"></div>
+      <p>选一个模组看详情</p>
+    </div>
+    <div class="details-body" id="detailsBody" hidden></div>
+  </aside>
+
+</div>
+
+<footer class="statusbar">
+  <span id="stGame" class="st-item">正在连接…</span>
+  <span id="stScan" class="st-item"></span>
+  <span class="st-spacer"></span>
+  <!-- 最近一条操作：撤销按钮紧挨着它。原来这两个一个在状态栏最右、
+       一个在「操作日志」弹窗里，隔了整个屏幕。 -->
+  <button class="st-recent" id="stRecent" hidden></button>
+  <button class="link-btn" id="btnUndo" disabled>撤销上一步</button>
+  <button class="link-btn" id="btnLog">操作日志</button>
+</footer>
+
+<div class="modal-mask" id="modalMask" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <strong id="modalTitle">操作日志</strong>
+      <button class="icon-btn" id="modalClose" title="关闭" aria-label="关闭">
+        <svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"></path></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<script src="/static/app.js"></script>
+<script src="/static/install.js"></script>
+<script src="/static/order.js"></script>
+<script src="/static/track.js"></script>
+<script src="/static/localize.js"></script>
+<script src="/static/settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+# ---- 构建产物 ----
+# PyInstaller 每次构建都会重建这些，仓库里只放源码和 dist 的 Release 附件。
+build/
+dist/
+*.spec
+*.manifest
+
+# ---- 运行时数据 ----
+# data/ 里是「这一台机器上的使用记录」：模组清单、封面缓存、快照、撤销日志、
+# 汉化原件。任何一个新用户 clone 下来都不该看到别人的这些东西。
+# 不放假 .gitkeep：程序在 data/ 不存在时会自己按需创建（tools/coldstart.py
+# 就是这么验的，空目录也能跑完全部只读接口）。
+data/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- 本地开发痕迹 ----
+_backup/
+_shots/
+*.log
+crash.log
+.env
+.env.*
+_work*
+
+# ---- 内部资料，不随源码公开 ----
+# 竞品分析、发布前评估这类东西只对维护者有意义。
+docs/competitive-review-*.html
+docs/*评估*.md
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+desktop.ini
+Thumbs.db
+.DS_Store
