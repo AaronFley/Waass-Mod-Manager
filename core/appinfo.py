@@ -20,8 +20,10 @@ import sys
 import urllib.request
 from pathlib import Path
 
+from core import i18n
+
 APP_NAME = "Waass Mod Manager"
-APP_VERSION = "1.2.7"
+APP_VERSION = "1.2.8"
 APP_DATE = "2026-10-30"
 APP_REPO = ""                     # 发布后填 GitHub 地址
 LICENSE = "MIT"
@@ -57,8 +59,7 @@ def check() -> dict:
     if not feed:
         return {
             "ok": False, "configured": False,
-            "message": "这是本地开发版，还没有配置更新源。发布到 GitHub 后，"
-                       "在 config.json 里填 update_feed 就能自动检查。",
+            "message": i18n.t("upd.no_feed"),
             "current": APP_VERSION,
         }
     req = urllib.request.Request(feed, headers={
@@ -70,13 +71,13 @@ def check() -> dict:
             raw = r.read(400_000)
     except Exception as e:                           # noqa: BLE001 网络问题不该崩界面
         return {"ok": False, "configured": True, "current": APP_VERSION,
-                "message": f"连不上更新源：{type(e).__name__}"}
+                "message": i18n.t("upd.feed_unreachable", err=type(e).__name__)}
 
     try:
         data = json.loads(raw.decode("utf-8", errors="replace"))
     except json.JSONDecodeError:
         return {"ok": False, "configured": True, "current": APP_VERSION,
-                "message": "更新源返回的不是 JSON"}
+                "message": i18n.t("upd.feed_bad_json")}
 
     # GitHub Release 与自制 JSON 两种格式都认
     latest = str(data.get("tag_name") or data.get("version") or "").strip()
@@ -84,12 +85,12 @@ def check() -> dict:
     notes = str(data.get("body") or data.get("notes") or "").strip()
     if not latest:
         return {"ok": False, "configured": True, "current": APP_VERSION,
-                "message": "更新源里没有版本号"}
+                "message": i18n.t("upd.feed_no_version")}
 
     c = compare(latest, APP_VERSION)
     return {
         "ok": True, "configured": True,
         "current": APP_VERSION, "latest": latest,
         "newer": c == 1, "url": url, "notes": notes[:600],
-        "message": ("有新版本 " + latest) if c == 1 else "已经是最新版本",
+        "message": i18n.t("upd.new_version", ver=latest) if c == 1 else i18n.t("upd.up_to_date"),
     }

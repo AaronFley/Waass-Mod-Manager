@@ -14,6 +14,7 @@ import time
 import winreg
 from pathlib import Path
 
+from . import i18n
 from .paths import load_config, save_config
 from . import ui as _ui
 
@@ -127,7 +128,7 @@ def dirs() -> list[dict]:
 def add_dir(path: str | Path) -> dict:
     p = _norm(path)
     if not p.is_dir():
-        raise FileNotFoundError(f"目录不存在：{p}")
+        raise FileNotFoundError(i18n.t("dl.dir_missing", path=p))
     cfg = load_config()
     lst = [str(_norm(x)) for x in _cfg_dirs()]
     if str(p) not in lst:

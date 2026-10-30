@@ -45,7 +45,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from . import safety
+from . import i18n, safety
 from .paths import DATA_DIR, detect_game_root
 
 BASE = DATA_DIR / "localize"
@@ -70,7 +70,7 @@ def _root(root: Path | None) -> Path:
         return Path(root)
     got = detect_game_root()
     if not got:
-        raise FileNotFoundError("找不到游戏目录，无法定位语言表")
+        raise FileNotFoundError(i18n.t("loc.no_game_root"))
     return Path(got)
 
 
@@ -271,7 +271,7 @@ def check(record_id: str | None = None) -> dict:
     """还原前的预检：哪些文件已经和记录对不上。"""
     items = _load()
     if not items:
-        return {"ok": False, "why": "还没有任何汉化记录", "drifted": []}
+        return {"ok": False, "why": i18n.t("loc.no_records"), "drifted": []}
     entry = None
     if record_id:
         for e in items:
@@ -279,7 +279,8 @@ def check(record_id: str | None = None) -> dict:
                 entry = e
                 break
         if not entry:
-            return {"ok": False, "why": "找不到这条记录：%s" % record_id, "drifted": []}
+            return {"ok": False, "why": i18n.t("loc.record_missing", id=record_id),
+                    "drifted": []}
     else:
         entry = items[-1]
 
@@ -287,11 +288,14 @@ def check(record_id: str | None = None) -> dict:
     for f in entry.get("files", []):
         p = Path(f["path"])
         if not p.is_file():
-            drifted.append({"path": str(p), "rel": f["rel"], "why": "文件不在了"})
+            drifted.append({"path": str(p), "rel": f["rel"],
+                            "why": i18n.t("loc.file_gone"), "code": "file_gone"})
             continue
         cur = _sha(p)
         if f.get("sha_after") and cur != f["sha_after"]:
-            drifted.append({"path": str(p), "rel": f["rel"], "why": "汉化之后又被改过"})
+            drifted.append({"path": str(p), "rel": f["rel"],
+                            "why": i18n.t("loc.drifted_after"),
+                            "code": "changed_again"})
     return {"ok": True, "entry": entry, "drifted": drifted,
             "files": len(entry.get("files", []))}
 
@@ -315,7 +319,8 @@ def restore(record_id: str | None = None, mode: str = "orig",
     """
     items = _load()
     if not items:
-        return {"ok": False, "why": "还没有任何汉化记录", "restored": [], "skipped": []}
+        return {"ok": False, "why": i18n.t("loc.no_records"),
+                "restored": [], "skipped": []}
 
     entry = None
     if record_id:
@@ -326,7 +331,7 @@ def restore(record_id: str | None = None, mode: str = "orig",
     else:
         entry = items[-1]
     if not entry:
-        return {"ok": False, "why": "找不到这条记录：%s" % record_id,
+        return {"ok": False, "why": i18n.t("loc.record_missing", id=record_id),
                 "restored": [], "skipped": []}
 
     src_base = ORIG if mode == "orig" else (HIST / entry["id"])
@@ -339,27 +344,33 @@ def restore(record_id: str | None = None, mode: str = "orig",
         src = src_base / rel
         if not src.is_file():
             skipped.append({"path": str(p), "rel": rel,
-                            "why": "没有原始备份" if mode == "orig" else "这批的备份已被清理"})
+                            "why": i18n.t("loc.no_orig_backup") if mode == "orig"
+                            else i18n.t("loc.hist_pruned"),
+                            "code": "no_backup" if mode == "orig"
+                            else "backup_pruned"})
             continue
         want = f.get("sha_after") if mode == "hist" else None
         if p.is_file() and not force:
             cur = _sha(p)
             if want and cur != want:
                 skipped.append({"path": str(p), "rel": rel,
-                                "why": "汉化之后又被改过，没敢覆盖"})
+                                "why": i18n.t("loc.drifted_skip"),
+                                "code": "changed_again"})
                 continue
             if mode == "orig" and cur == _sha(src):
-                skipped.append({"path": str(p), "rel": rel, "why": "已经是原始文件"})
+                skipped.append({"path": str(p), "rel": rel,
+                                "why": i18n.t("loc.already_orig"),
+                                "code": "already_original"})
                 continue
         plan.append((f, src))
 
     if not plan:
         return {"ok": True, "restored": [], "skipped": skipped,
-                "why": "没有需要还原的文件"}
+                "why": i18n.t("loc.nothing_to_restore")}
 
     safety.assert_writable(*[Path(f["path"]) for f, _ in plan])
 
-    op = safety.Operation("还原汉化")
+    op = safety.Operation(i18n.t("loc.op_restore"))
     done = []
     for f, src in plan:
         p = Path(f["path"])
@@ -380,7 +391,7 @@ def drop_all(confirm: bool = False) -> dict:
     故意要求显式 confirm：这是唯一一个「删了真没办法」的操作。
     """
     if not confirm:
-        return {"ok": False, "why": "需要明确确认才能清空汉化备份"}
+        return {"ok": False, "why": i18n.t("loc.drop_needs_confirm")}
     removed = []
     for d in (ORIG, HIST):
         if d.is_dir():

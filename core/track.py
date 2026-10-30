@@ -41,6 +41,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from . import i18n
 from .paths import DATA_DIR
 
 TRACK = DATA_DIR / "track.json"
@@ -53,13 +54,13 @@ _CACHE_TTL = 30
 _conf: dict = {"at": 0.0, "legacy": {}, "arch": {}, "nx": {}}
 
 _VERSION_SRC_CN = {
-    "manual": "你填的",
-    "info": "mod 自带信息",
-    "manifest": "安装记录",
-    "legacy": "历史记录",
-    "rmmr": "历史记录",
-    "archive": "下载的包",
-    "folder": "mod 自带文件",
+    "manual": "trk.src_manual",
+    "info": "trk.src_info",
+    "manifest": "trk.src_manifest",
+    "legacy": "trk.src_legacy",
+    "rmmr": "trk.src_legacy",
+    "archive": "trk.src_archive",
+    "folder": "trk.src_folder",
     "": "",
 }
 
@@ -68,11 +69,11 @@ _VERSION_SRC_CN = {
 _PKG_GRACE = 60
 
 _ID_SRC_CN = {
-    "manual": "你填的",
-    "legacy": "历史记录",
-    "readme": "说明文件",
-    "package": "安装包名",
-    "search": "搜索确认",
+    "manual": "trk.id_manual",
+    "legacy": "trk.id_legacy",
+    "readme": "trk.id_readme",
+    "package": "trk.id_package",
+    "search": "trk.id_search",
     "": "",
 }
 
@@ -119,7 +120,7 @@ def load_ignored() -> set[str]:
 def set_ignored(key: str, on: bool = True) -> dict:
     key = (key or "").strip()
     if not key:
-        raise ValueError("缺少 mod 标识")
+        raise ValueError(i18n.t("trk.no_key"))
     cur = load_ignored()
     if on:
         cur.add(key)
@@ -136,18 +137,18 @@ def parse_ref(text: str) -> str:
     """从「13087」「witcher3/mods/13087」「完整网址」里抽出 ID。"""
     s = (text or "").strip()
     if not s:
-        raise ValueError("没有填内容")
+        raise ValueError(i18n.t("trk.ref_empty"))
     if s.isdigit():
         if 2 <= len(s) <= 8:
             return s
-        raise ValueError("这个数字看着不像 Nexus ID（一般是 3~6 位）")
+        raise ValueError(i18n.t("trk.ref_bad_number"))
     m = re.search(r"/mods?/(\d{2,8})", s)
     if m:
         return m.group(1)
     m = re.search(r"\b(\d{3,8})\b", s)
     if m:
         return m.group(1)
-    raise ValueError("没从这串内容里认出 Nexus ID")
+    raise ValueError(i18n.t("trk.ref_not_found"))
 
 
 def search_url(name: str) -> str:
@@ -159,7 +160,7 @@ def set_manual(key: str, ref: str = "", version: str = "") -> dict:
     """记下某个 mod 的 Nexus ID / 本地版本。ref 为空表示只改版本。"""
     key = (key or "").strip()
     if not key:
-        raise ValueError("缺少 mod 标识")
+        raise ValueError(i18n.t("trk.no_key"))
     manual = load_manual()
     cur = dict(manual.get(key) or {})
     if ref.strip():
@@ -413,7 +414,8 @@ def apply(mods: list) -> int:
 
 
 def version_src_cn(src: str) -> str:
-    return _VERSION_SRC_CN.get(src or "", "")
+    key = _VERSION_SRC_CN.get(src or "", "")
+    return i18n.t(key) if key else ""
 
 
 def rows(mods: list) -> dict:
@@ -421,6 +423,14 @@ def rows(mods: list) -> dict:
     out = []
     ignored = load_ignored()
     for m in mods:
+        id_key = _ID_SRC_CN.get(m.id_src or "", "")
+        # latest_code 是给前端比较用的稳定值（track.js 原来拿中文「刚查到」做匹配）
+        if m.latest_src == "nexus":
+            latest_cn, latest_code = i18n.t("trk.latest_fresh"), "fresh"
+        elif m.latest_src == "legacy":
+            latest_cn, latest_code = i18n.t("trk.latest_legacy"), "recorded"
+        else:
+            latest_cn, latest_code = "", ""
         out.append({
             "key": m.key,
             "name": m.name,
@@ -432,13 +442,13 @@ def rows(mods: list) -> dict:
             "nexus_id": m.nexus_id or "",
             "url": m.nexus_url or "",
             "id_src": m.id_src or "",
-            "id_cn": _ID_SRC_CN.get(m.id_src or "", ""),
+            "id_cn": i18n.t(id_key) if id_key else "",
             "version": m.version or "",
             "version_cn": version_src_cn(m.version_src),
             "latest": m.latest_version or "",
             "latest_at": (m.latest_at or "")[:10],
-            "latest_cn": "刚查到" if m.latest_src == "nexus" else (
-                "历史记录" if m.latest_src == "legacy" else ""),
+            "latest_cn": latest_cn,
+            "latest_code": latest_code,
             "latest_file": m.latest_file or "",
             "latest_page": m.page_version or "",
             "state": m.track_state or "unknown",
@@ -463,7 +473,7 @@ def rows(mods: list) -> dict:
         "unknown": sum(1 for r in out if r["state"] == "unknown"),
         "unchecked": sum(1 for r in out if r["state"] == "unchecked"),
         "no_version": sum(1 for r in out if not r["version"]),
-        "with_meta": sum(1 for r in out if r["latest_cn"] == "刚查到"),
+        "with_meta": sum(1 for r in out if r["latest_code"] == "fresh"),
         "with_cover": sum(1 for r in out if r["cover"]),
         "record_at": max((r["latest_at"] for r in out if r["latest_at"]), default=""),
     }

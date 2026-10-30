@@ -25,7 +25,7 @@ let SHOW = 'all';        // 结果表筛选：all / todo
 const CAT_ICON = { menu: '▤', mod_name: '◈', item: '◍' };
 
 async function openLocalizeDialog() {
-  openModal('汉化', `<div class="upd-loading">正在检查各模组的语言表…</div>`, { wide: true });
+  openModal(T('ui.nav_localize'), `<div class="upd-loading">${T('localize.loading_panel')}</div>`, { wide: true });
   SEL = new Set();
   EDITS = new Map();
   JOB = null;
@@ -46,39 +46,39 @@ function engLine() {
   const list = LOC.engines || [];
   const live = list.filter(e => e.on && e.ready);
   if (!live.length) {
-    return `<span class="loc-eng-bad">没有可用的翻译方式</span>
-      <button class="btn btn-sm" data-locact="engine">去设置</button>`;
+    return `<span class="loc-eng-bad">${T('localize.engine_none')}</span>
+      <button class="btn btn-sm" data-locact="engine">${T('localize.go_settings')}</button>`;
   }
   const top = live.find(e => e.default) || live[0];
-  const more = live.length > 1 ? ` <span class="loc-eng-more">+${live.length - 1} 个备用</span>` : '';
+  const more = live.length > 1 ? ` <span class="loc-eng-more">${T('localize.engine_more', { n: live.length - 1 })}</span>` : '';
   return `<b>${esc(top.label)}</b>${more}
-    <span class="loc-eng-note">免配置，翻不出来会自动换下一个</span>
-    <button class="btn btn-sm" data-locact="probe">测一下</button>
-    <button class="btn btn-sm" data-locact="engine">换</button>`;
+    <span class="loc-eng-note">${T('localize.engine_note')}</span>
+    <button class="btn btn-sm" data-locact="probe">${T('localize.probe')}</button>
+    <button class="btn btn-sm" data-locact="engine">${T('localize.switch_engine')}</button>`;
 }
 
 function modRow(m) {
   const on = SEL.has(m.key);
   const c = m.counts || {};
   const cnt = [];
-  if (m.menu) cnt.push(`<span class="loc-cnt loc-cnt-menu">菜单 ${m.menu}</span>`);
-  if (c.mod_name) cnt.push(`<span class="loc-cnt">名称 ${c.mod_name}</span>`);
-  if (c.item) cnt.push(`<span class="loc-cnt">物品 ${c.item}</span>`);
+  if (m.menu) cnt.push(`<span class="loc-cnt loc-cnt-menu">${T('localize.cnt_menu', { n: m.menu })}</span>`);
+  if (c.mod_name) cnt.push(`<span class="loc-cnt">${T('localize.cnt_name', { n: c.mod_name })}</span>`);
+  if (c.item) cnt.push(`<span class="loc-cnt">${T('localize.cnt_item', { n: c.item })}</span>`);
   if (m.stale) {
-    cnt.push(`<span class="loc-cnt loc-cnt-stale" title="这些英文原本是菜单里的名字，已经被 XML 里的中文取代，界面上不显示">过期 ${m.stale}</span>`);
+    cnt.push(`<span class="loc-cnt loc-cnt-stale" title="${T('localize.stale_title')}">${T('localize.cnt_stale', { n: m.stale })}</span>`);
   }
-  if (!cnt.length) cnt.push(`<span class="loc-cnt loc-cnt-off">无可翻内容</span>`);
+  if (!cnt.length) cnt.push(`<span class="loc-cnt loc-cnt-off">${T('localize.cnt_none')}</span>`);
   const status = m.blocked
     ? `<span class="loc-why">${esc(m.blocked)}</span>`
     : (m.menu ? ''
-       : (m.docs ? `<span class="loc-why">${esc(m.why || '只剩模组名和物品名，默认不翻')}</span>`
+       : (m.docs ? `<span class="loc-why">${esc(m.why || T('localize.why_names_only'))}</span>`
                  : `<span class="loc-why">${esc(m.why || '')}</span>`));
   return `
     <label class="loc-mod ${on ? 'is-on' : ''} ${m.ready ? '' : 'is-off'}">
       <input type="checkbox" data-locmod="${esc(m.key)}" ${on ? 'checked' : ''} ${m.ready ? '' : 'disabled'}>
       <span class="loc-mod-main">
         <span class="loc-mod-name">${esc(m.name)}
-          ${m.enabled ? '' : '<span class="loc-tag">已禁用</span>'}</span>
+          ${m.enabled ? '' : `<span class="loc-tag">${T('common.disabled')}</span>`}</span>
         <span class="loc-mod-sub">${cnt.join('')}${status}</span>
       </span>
     </label>`;
@@ -87,18 +87,17 @@ function modRow(m) {
 function historyBlock() {
   const recs = LOC.records || [];
   if (!recs.length) {
-    return `<div class="loc-hist-empty">还没汉化过任何模组。第一次点「写入」时，程序会先把原始文件
-      存一份到程序目录里 —— 以后任何时候都能一键退回去。</div>`;
+    return `<div class="loc-hist-empty">${T('localize.hist_empty')}</div>`;
   }
   return recs.map(r => `
     <div class="loc-hist">
       <div class="loc-hist-main">
-        <div class="loc-hist-name">${esc(r.label || '汉化')}</div>
-        <div class="loc-hist-sub">${esc(r.time)} · ${r.count || 0} 条 · ${(r.files || []).length} 个文件</div>
+        <div class="loc-hist-name">${esc(r.label || T('ui.nav_localize'))}</div>
+        <div class="loc-hist-sub">${esc(r.time)} · ${T('localize.hist_meta', { n: r.count || 0, f: (r.files || []).length })}</div>
       </div>
       <div class="loc-hist-act">
-        <button class="btn btn-sm" data-restore="${esc(r.id)}" data-mode="hist">退回这次</button>
-        <button class="btn btn-sm" data-restore="${esc(r.id)}" data-mode="orig">恢复原始</button>
+        <button class="btn btn-sm" data-restore="${esc(r.id)}" data-mode="hist">${T('localize.restore_batch')}</button>
+        <button class="btn btn-sm" data-restore="${esc(r.id)}" data-mode="orig">${T('localize.restore_orig')}</button>
       </div>
     </div>`).join('');
 }
@@ -121,33 +120,32 @@ function renderLocalize() {
       <div class="loc-hero${total ? '' : ' is-done'}">
         <div class="loc-hero-num">${total}</div>
         <div class="loc-hero-txt">
-          ${total ? `<b>条菜单文字还是英文</b>
-          <span>分布在 ${ready.length} 个模组里。勾选要翻的模组，点下面的按钮就行 ——
-            不用导出文件、不用复制粘贴。</span>`
-        : `<b>菜单里已经没有英文了</b>
+          ${total ? `<b>${T('localize.hero_left')}</b>
+          <span>${TN('localize.hero_sub_one', 'localize.hero_sub_many', ready.length)}</span>`
+        : `<b>${T('localize.hero_done')}</b>
           <span>${rows.length
-              ? '下面这些模组要么已经全中文，要么是把中文直接写进了菜单文件 / 脚本里。'
-              : '当前游戏目录里的模组都不需要翻译。'}</span>`}
+              ? T('localize.hero_done_listed')
+              : T('localize.hero_done_none')}</span>`}
         </div>
       </div>
 
       <div class="loc-eng">${engLine()}</div>
 
       <div class="loc-sec">
-        <div class="loc-sec-title">翻哪些内容</div>
+        <div class="loc-sec-title">${T('localize.sec_cats')}</div>
         <div class="loc-cats">${catBox}</div>
         <div class="loc-cat-hint">${
           CATS.has('mod_name') || CATS.has('item')
-            ? '⚠ 模组名和物品名改动后可能与脚本、存档里的名字对不上，出问题难排查。不确定就别勾。'
-            : '默认只翻菜单页 —— 模组名和物品名不动，这两类改了容易出问题。'
+            ? T('localize.cat_hint_warn')
+            : T('localize.cat_hint_default')
         }</div>
       </div>
 
       <div class="loc-sec">
-        <div class="loc-sec-title">翻哪些模组
+        <div class="loc-sec-title">${T('localize.sec_mods')}
           <span class="loc-sec-act">
-            <button class="btn btn-sm" data-locact="pickready">全选可翻的</button>
-            <button class="btn btn-sm" data-locact="picknone">清空</button>
+            <button class="btn btn-sm" data-locact="pickready">${T('localize.pick_ready')}</button>
+            <button class="btn btn-sm" data-locact="picknone">${T('localize.pick_none')}</button>
           </span>
         </div>
         <div class="loc-mods">${rows.map(modRow).join('')}</div>
@@ -155,31 +153,27 @@ function renderLocalize() {
 
       <div class="loc-go loc-go-sticky">
         <button class="btn btn-primary" id="locGo" ${picked.length ? '' : 'disabled'}>
-          一键补翻${picked.length ? `（${picked.length} 个模组 · ${pickedCount} 条）` : ''}
+          ${picked.length
+            ? TN('localize.run_scope_one', 'localize.run_scope_many', picked.length, { s: pickedCount })
+            : T('localize.run')}
         </button>
         <span class="loc-go-note">${picked.length
-          ? `约 ${Math.max(3, Math.round(pickedCount * 0.25))} 秒 · 翻完先给你看，确认了才写进文件`
-          : '这里没有需要翻的菜单文字'}</span>
+          ? T('localize.run_note', { n: Math.max(3, Math.round(pickedCount * 0.25)) })
+          : T('localize.run_none')}</span>
       </div>
 
       <details class="loc-hist-box" ${(LOC.records || []).length ? '' : 'open'}>
-        <summary>汉化记录与还原 <em>${(LOC.records || []).length}</em></summary>
-        <div class="loc-hist-note">写进游戏目录之前的原件都存着，随时能退。
-          「恢复原始」= 回到从没汉化过的样子；「退回这次」= 只撤掉这一批。</div>
+        <summary>${T('localize.hist_title')} <em>${(LOC.records || []).length}</em></summary>
+        <div class="loc-hist-note">${T('localize.hist_note')}</div>
         ${historyBlock()}
       </details>
 
       <div class="pv-note">
-        <b>为什么有的模组翻不了</b><br>
-        <b>已手工汉化</b>：有人的汉化是直接改菜单文件（把 <code>displayName</code> 写成中文），
-        这样界面已经是中文，语言表里剩下的英文是被它取代的旧文本，标成「过期」——
-        不用再翻，翻了也不会显示。<br>
-        <b>读不出原文</b>：语言表被加密了，程序不去猜密钥。这只说明我们看不见，
-        不代表游戏里没中文 —— 别因为这里列出来就去改它。<br>
-        <b>文字在脚本里</b>：AutoLoot 这类模组把菜单文字直接写在 <code>.ws</code> 里按语言分支返回，
-        语言表里没中文是正常的，游戏里显示得好好的。程序只识别、不改脚本。<br>
-        <b>长度限制</b>：写入保持文件大小不变，所以译文不能比原文长。放不下的会自动缩句，
-        缩完还放不下会标出来让你改短 —— 绝不截断，截断就是一屏乱码。
+        ${T('localize.why_title')}<br>
+        ${T('localize.why_manual')}<br>
+        ${T('localize.why_unreadable')}<br>
+        ${T('localize.why_script')}<br>
+        ${T('localize.why_length')}
       </div>
     </div>`;
 
@@ -220,10 +214,10 @@ function locAct(act) {
 /* ---------------- 第二屏：翻 ---------------- */
 
 async function startRun() {
-  if (!SEL.size) return toast('先勾选要翻的模组');
-  if (!CATS.size) return toast('至少要选一类内容');
+  if (!SEL.size) return toast(T('localize.err_no_mods'));
+  if (!CATS.size) return toast(T('localize.err_no_cats'));
   const box = $('#modalBody');
-  box.querySelector('.loc-go').innerHTML = `<span class="loc-run-note">正在生成任务…</span>`;
+  box.querySelector('.loc-go').innerHTML = `<span class="loc-run-note">${T('localize.run_starting')}</span>`;
   try {
     JOB = await api('/api/localize/run', { mods: [...SEL], cats: [...CATS] });
   } catch (e) {
@@ -242,10 +236,10 @@ function renderProgress() {
   $('#modalBody').innerHTML = `
     <div class="pkg">
       <div class="loc-run">
-        <div class="loc-run-title">正在翻译 ${d}/${t}</div>
+        <div class="loc-run-title">${T('localize.run_progress', { d: d, t: t })}</div>
         <div class="loc-run-bar"><i style="width:${pct}%"></i></div>
-        <div class="loc-run-sub">同一句原文只翻一次。翻好的先放这儿，你说写才写。</div>
-        <button class="btn btn-sm" id="locCancel">停下</button>
+        <div class="loc-run-sub">${T('localize.run_sub')}</div>
+        <button class="btn btn-sm" id="locCancel">${T('localize.stop')}</button>
       </div>
     </div>`;
   $('#locCancel').onclick = async () => {
@@ -260,7 +254,7 @@ async function pollJob() {
     JOB = s;
   } catch (e) {
     clearInterval(POLL); POLL = null;
-    toast('拿不到进度：' + e.message, 5000);
+    toast(T('localize.err_progress', { msg: e.message }), 5000);
     return;
   }
   if (JOB.status === 'running') { renderProgress(); return; }
@@ -280,13 +274,13 @@ function effBad(r) {
 
 function rowStatus(r) {
   if (effBad(r)) {
-    return `<span class="loc-st loc-st-bad">${r.dst || EDITS.has(r.id) ? '放不下' : '没翻成'}</span>`;
+    return `<span class="loc-st loc-st-bad">${r.dst || EDITS.has(r.id) ? T('localize.st_too_long') : T('localize.st_failed')}</span>`;
   }
-  if (String(r.status).startsWith('cancel')) return `<span class="loc-st">已取消</span>`;
-  if (r.engine === 'memory') return `<span class="loc-st loc-st-ok">记忆命中</span>`;
-  if (r.engine === 'glossary') return `<span class="loc-st loc-st-ok">术语表</span>`;
-  if (r.shortened) return `<span class="loc-st loc-st-warn">已缩写</span>`;
-  return `<span class="loc-st loc-st-ok">已翻</span>`;
+  if (String(r.status).startsWith('cancel')) return `<span class="loc-st">${T('localize.st_cancelled')}</span>`;
+  if (r.engine === 'memory') return `<span class="loc-st loc-st-ok">${T('localize.st_memory')}</span>`;
+  if (r.engine === 'glossary') return `<span class="loc-st loc-st-ok">${T('localize.st_glossary')}</span>`;
+  if (r.shortened) return `<span class="loc-st loc-st-warn">${T('localize.st_shortened')}</span>`;
+  return `<span class="loc-st loc-st-ok">${T('localize.st_done')}</span>`;
 }
 
 function resultRow(r) {
@@ -301,7 +295,7 @@ function resultRow(r) {
       <td class="loc-td-src">${esc(r.src)}</td>
       <td class="loc-td-dst">
         <input class="loc-input" data-edit="${esc(r.id)}" value="${esc(dst)}"
-               placeholder="${bad ? '改成更短的写法' : ''}">
+               placeholder="${bad ? T('localize.ph_shorter') : ''}">
         <div class="loc-td-meta">${rowStatus(r)} <span class="loc-bytes">${room}</span>
           ${r.why ? `<span class="loc-why-inline">${esc(r.why)}</span>` : ''}</div>
       </td>
@@ -325,32 +319,31 @@ function renderResults() {
   $('#modalBody').innerHTML = `
     <div class="pkg">
       <div class="loc-sum2">
-        <div><b>${writable.length}</b><span>可以写入</span></div>
-        <div class="${bad ? 'is-warn' : ''}"><b>${bad}</b><span>要你改一下</span></div>
-        <div><b>${JOB.total}</b><span>总共</span></div>
+        <div><b>${writable.length}</b><span>${T('localize.sum_writable')}</span></div>
+        <div class="${bad ? 'is-warn' : ''}"><b>${bad}</b><span>${T('localize.sum_bad')}</span></div>
+        <div><b>${JOB.total}</b><span>${T('localize.sum_total')}</span></div>
       </div>
 
-      ${bad ? `<div class="loc-tip">橙色那几行的译文比原文长，写进不去。
-        在右边直接改短就行 —— 改完立刻能写。也可以不管它们，其余的先写进去。</div>` : ''}
+      ${bad ? `<div class="loc-tip">${T('localize.tip_bad')}</div>` : ''}
 
       <div class="loc-filter">
-        <button class="btn btn-sm ${SHOW === 'all' ? 'is-on' : ''}" data-show="all">全部 ${items.length}</button>
-        <button class="btn btn-sm ${SHOW === 'todo' ? 'is-on' : ''}" data-show="todo">只看要改的 ${bad}</button>
+        <button class="btn btn-sm ${SHOW === 'all' ? 'is-on' : ''}" data-show="all">${T('localize.filter_all', { n: items.length })}</button>
+        <button class="btn btn-sm ${SHOW === 'todo' ? 'is-on' : ''}" data-show="todo">${T('localize.filter_todo', { n: bad })}</button>
       </div>
 
       <div class="loc-table-wrap">
         <table class="loc-table">
-          <thead><tr><th>模组</th><th>原文</th><th>译文（可以直接改）</th></tr></thead>
+          <thead><tr><th>${T('localize.th_mod')}</th><th>${T('localize.th_src')}</th><th>${T('localize.th_dst')}</th></tr></thead>
           <tbody>${items.map(resultRow).join('')}</tbody>
         </table>
       </div>
 
       <div class="loc-go loc-go-sticky">
         <button class="btn btn-primary" id="locWrite" ${writable.length ? '' : 'disabled'}>
-          写入 ${writable.length} 条
+          ${TN('localize.write_n_one', 'localize.write_n_many', writable.length)}
         </button>
-        <button class="btn btn-sm" data-locact2="back">返回重选</button>
-        <span class="loc-go-note">写入前自动备份原件；写错了随时「恢复原始」。</span>
+        <button class="btn btn-sm" data-locact2="back">${T('localize.back')}</button>
+        <span class="loc-go-note">${T('localize.write_note')}</span>
       </div>
     </div>`;
 
@@ -370,19 +363,19 @@ function renderResults() {
 async function doWrite() {
   const btn = $('#locWrite');
   btn.disabled = true;
-  btn.textContent = '写入中…';
+  btn.textContent = T('localize.writing');
   const edits = [...EDITS.entries()].map(([id, dst]) => ({ id, dst }));
   try {
     const r = await api('/api/localize/write', { id: JOB.id, edits });
     const box = $('#modalBody');
     if (!r.ok) {
-      const why = r.error || '一条都没写进去';
+      const why = r.error || T('localize.err_nothing_written');
       const list = (r.skipped || []).slice(0, 5).map(s =>
-        `<div class="loc-skip">${esc(s.text || '')} → 差 ${(s.need || 0) - (s.room || 0)} 字节</div>`).join('');
+        `<div class="loc-skip">${esc(s.text || '')} ${T('localize.skip_bytes', { n: (s.need || 0) - (s.room || 0) })}</div>`).join('');
       box.querySelector('.loc-go-sticky').insertAdjacentHTML('afterend',
         `<div class="pv-warn">${esc(why)}${list ? `<div class="loc-skipbox">${list}</div>` : ''}</div>`);
       btn.disabled = false;
-      btn.textContent = '重试';
+      btn.textContent = T('common.retry');
       return;
     }
     await load(true);
@@ -391,14 +384,14 @@ async function doWrite() {
       <div class="pkg">
         <div class="loc-done2">
           <div class="loc-done2-num">${r.changed}</div>
-          <div class="loc-done2-txt"><b>条中文已经写进游戏</b>
-            <span>${(r.files || []).length} 个语言表文件 · 原件已备份</span></div>
+          <div class="loc-done2-txt"><b>${TN('localize.done_written_one', 'localize.done_written_many', r.changed)}</b>
+            <span>${TN('localize.done_files_one', 'localize.done_files_many', (r.files || []).length)}</span></div>
         </div>
-        ${r.skipped_count ? `<div class="loc-tip">还有 ${r.skipped_count} 条太长没写进去，下次补翻会再出现。</div>` : ''}
-        <div class="pv-warn">改了语言表要重启游戏才生效 —— 游戏只在启动时读一次。</div>
+        ${r.skipped_count ? `<div class="loc-tip">${TN('localize.done_skipped_one', 'localize.done_skipped_many', r.skipped_count)}</div>` : ''}
+        <div class="pv-warn">${T('localize.done_restart')}</div>
         <div class="set-actions">
-          <button class="btn btn-sm btn-primary" id="locAgain">继续翻别的</button>
-          <button class="btn btn-sm" data-restore-back="1">不满意，恢复原始</button>
+          <button class="btn btn-sm btn-primary" id="locAgain">${T('localize.again')}</button>
+          <button class="btn btn-sm" data-restore-back="1">${T('localize.restore_orig_btn')}</button>
         </div>
       </div>`;
     $('#locAgain').onclick = () => { JOB = null; SEL = new Set(); renderLocalize(); };
@@ -407,39 +400,36 @@ async function doWrite() {
   } catch (e) {
     toast(e.message, 5000);
     btn.disabled = false;
-    btn.textContent = '重试';
+    btn.textContent = T('common.retry');
   }
 }
 
 /* ---------------- 还原 ---------------- */
 
 async function doRestore(recordId, mode, btn) {
-  const what = mode === 'orig' ? '恢复到从没汉化过的原始文件' : '退掉这一批汉化';
-  if (!confirm(`确定${what}？\n\n会改动游戏目录里的语言表文件，改之前会再存一份快照。`)) return;
+  const what = mode === 'orig' ? T('localize.confirm_orig') : T('localize.confirm_batch');
+  if (!confirm(what)) return;
   btn.disabled = true;
   const old = btn.textContent;
-  btn.textContent = '还原中…';
+  btn.textContent = T('localize.restoring');
   try {
     let r = await api('/api/localize/restore', { record: recordId || null, mode, force: false });
     if (r.ok && (r.skipped || []).length) {
-      const drift = r.skipped.filter(s => String(s.why).includes('又被改过'));
+      const drift = r.skipped.filter(s => s.code === 'changed_again');
       if (drift.length) {
-        const go = confirm(
-          `有 ${drift.length} 个文件在汉化之后又被改过（可能模组更新了）。\n` +
-          `这些文件的备份是旧版本，覆盖上去会把新内容换掉。\n\n` +
-          `要继续覆盖吗？选「取消」就只还原其余没动过的。`);
+        const go = confirm(T('localize.confirm_drift', { n: drift.length }));
         if (go) r = await api('/api/localize/restore', { record: recordId || null, mode, force: true });
       }
     }
     if (r.ok) {
       const n = (r.restored || []).length;
-      toast(n ? `已还原 ${n} 个文件` : '没有需要还原的文件', 3500);
+      toast(n ? TN('localize.restored_one', 'localize.restored_many', n) : T('localize.restored_none'), 3500);
       await load(true);
       LOC = await api('/api/localize/panel');
       JOB = null;
       renderLocalize();
     } else {
-      toast(r.why || r.error || '还原失败', 5000);
+      toast(r.why || r.error || T('localize.err_restore'), 5000);
     }
   } catch (e) {
     toast(e.message, 5000);
@@ -452,13 +442,13 @@ async function doRestore(recordId, mode, btn) {
 /* ---------------- 引擎设置 ---------------- */
 
 async function probeEngines() {
-  toast('正在测速，约 3 秒…', 2500);
+  toast(T('localize.probing'), 2500);
   try {
     const r = await api('/api/localize/probe', {});
     const lines = (r.engines || []).map(e =>
       `<div class="loc-probe ${e.ok ? 'is-ok' : 'is-bad'}">
         <b>${esc(e.label)}</b>
-        <span>${e.ok ? `${e.ms} ms · ${esc(String(e.dst || '').slice(0, 24))}` : esc(e.why || '不可用')}</span>
+        <span>${e.ok ? `${e.ms} ms · ${esc(String(e.dst || '').slice(0, 24))}` : esc(e.why || T('localize.engine_down'))}</span>
       </div>`).join('');
     LOC.engines = LOC.engines.map(e => {
       const hit = (r.engines || []).find(x => x.id === e.id);
@@ -480,25 +470,23 @@ async function openEngineDialog() {
       <label class="loc-engrow-head">
         <input type="checkbox" data-eng="${esc(e.id)}" ${e.on ? 'checked' : ''}>
         <b>${esc(e.label)}</b>
-        ${e.ready ? '<span class="loc-tag loc-tag-ok">可用</span>'
-                  : `<span class="loc-tag">${esc(e.why || '不可用')}</span>`}
+        ${e.ready ? `<span class="loc-tag loc-tag-ok">${T('localize.engine_up')}</span>`
+                  : `<span class="loc-tag">${esc(e.why || T('localize.engine_down'))}</span>`}
       </label>
       ${e.needs_key ? `<textarea class="loc-keys" data-keys="${esc(e.id)}" rows="2"
-        placeholder="这一项需要自备 Key，一行一个（可以填多个，轮着用）">${
+        placeholder="${T('localize.keys_ph')}">${
           esc((e.keys_list || []).join('\n'))}</textarea>` : ''}
     </div>`).join('');
 
-  openModal('翻译方式', `
+  openModal(T('localize.engine_dialog_title'), `
     <div class="pkg">
-      <div class="loc-eng-note2">程序按顺序试，第一个不行就换下一个 ——
-        某个免费接口偶尔抽风时，你不会卡在那儿。</div>
+      <div class="loc-eng-note2">${T('localize.engine_dialog_note')}</div>
       ${rows}
       <div class="set-actions" style="margin-top:10px">
-        <button class="btn btn-sm btn-primary" id="locEngSave">保存</button>
-        <button class="btn btn-sm" id="locEngProbe">测一下</button>
+        <button class="btn btn-sm btn-primary" id="locEngSave">${T('common.save')}</button>
+        <button class="btn btn-sm" id="locEngProbe">${T('localize.probe')}</button>
       </div>
-      <div class="pv-note">免 Key 的两个（Google / MyMemory）打开就能用。
-        需要 Key 的填了才出现；一行一个 Key，程序轮着用，单个 Key 限流不会整批失败。</div>
+      <div class="pv-note">${T('localize.engine_key_note')}</div>
     </div>`, { wide: true });
 
   $('#locEngSave').onclick = async () => {
@@ -515,7 +503,7 @@ async function openEngineDialog() {
     try {
       const r = await api('/api/localize/config', { engines });
       LOC.engines = r.engines || LOC.engines;
-      toast('已保存');
+      toast(T('localize.saved'));
       openLocalizeDialog();
     } catch (e) {
       toast(e.message, 5000);

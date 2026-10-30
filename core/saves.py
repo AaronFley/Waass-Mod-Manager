@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import guard
+from . import i18n
 from .paths import DATA_DIR, user_config_dir
 
 SAVE_DIR = DATA_DIR / "saves"
@@ -54,13 +55,13 @@ def backup(root: Path | None = None, mode: str = "full", note: str = "") -> dict
     """备份存档。mode = "full" 全量 / "incremental" 增量。"""
     src = gamesaves_dir(root)
     if not src.is_dir():
-        raise FileNotFoundError(f"找不到存档目录：{src}")
+        raise FileNotFoundError(i18n.t("sav.dir_missing", path=src))
 
     guard.allow(DATA_DIR)
 
     files = _scan(src)
     if not files:
-        raise FileNotFoundError("存档目录是空的，没有可备份的内容")
+        raise FileNotFoundError(i18n.t("sav.empty"))
 
     index = _load_index()
     prev_files: dict[str, dict] = {}
@@ -78,7 +79,7 @@ def backup(root: Path | None = None, mode: str = "full", note: str = "") -> dict
 
     if not picked:
         return {"ok": True, "empty": True, "mode": mode,
-                "message": "自上次备份以来没有新存档"}
+                "message": i18n.t("sav.no_new")}
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     target = SAVE_DIR / f"saves-{stamp}-{mode}.zip"
@@ -118,18 +119,18 @@ def restore_backup(backup_id: str, root: Path | None = None) -> dict:
     index = _load_index()
     entry = next((b for b in index["backups"] if b["id"] == backup_id), None)
     if entry is None:
-        raise FileNotFoundError(f"没有这次备份：{backup_id}")
+        raise FileNotFoundError(i18n.t("sav.not_found", id=backup_id))
 
     archive = SAVE_DIR / entry["file"]
     if not archive.is_file():
-        raise FileNotFoundError(f"备份文件不见了：{archive}")
+        raise FileNotFoundError(i18n.t("sav.file_missing", path=archive))
 
     dest = gamesaves_dir(root)
     guard.allow(DATA_DIR, dest)
 
     safety_copy = {}
     if dest.is_dir() and any(dest.iterdir()):
-        safety_copy = backup(root, mode="full", note=f"恢复 {backup_id} 之前自动留底")
+        safety_copy = backup(root, mode="full", note=i18n.t("sav.restore_note", id=backup_id))
 
     dest.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(archive) as zf:

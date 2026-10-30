@@ -25,7 +25,7 @@ const S = {
 
 /* ---------- 主题：auto / light / dark ---------- */
 const THEME_ORDER = ['auto', 'light', 'dark'];
-const THEME_LABEL = { auto: '跟随系统', light: '亮色', dark: '暗色' };
+const THEME_KEY = { auto: 'app.theme_auto', light: 'app.theme_light', dark: 'app.theme_dark' };
 const darkMQ = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 const resolvedTheme = t => (t === 'auto' ? (darkMQ && darkMQ.matches ? 'dark' : 'light') : t);
 function applyTheme() {
@@ -34,7 +34,7 @@ function applyTheme() {
   document.documentElement.dataset.themeMode =
     (S.theme === 'light' || S.theme === 'dark') ? S.theme : 'auto';
   const btn = $('#btnTheme');
-  if (btn) btn.title = `外观：${THEME_LABEL[S.theme] || S.theme}（点击切换）`;
+  if (btn) btn.title = T('app.theme_btn_title', { name: T(THEME_KEY[S.theme] || S.theme) });
 }
 
 /* ---------- Nexus 英文分类 → 中文分组 ---------- */
@@ -65,6 +65,19 @@ const CAT = {
   'Overhauls': '大修',
 };
 const catCN = c => CAT[c] || (c ? '其他' : '未分类');
+/* 分类名要跟着界面语言走，但 CAT / CAT_HUE 的键必须原样留着 ——
+   色相表按中文名查，改了键就等于所有卡片都变成一个颜色。 */
+const CAT_KEY = {
+  界面: 'app.cat_ui', 画面: 'app.cat_visuals', 战斗: 'app.cat_combat',
+  玩法: 'app.cat_gameplay', 装备: 'app.cat_items', 修复: 'app.cat_fixes',
+  优化: 'app.cat_performance', 任务: 'app.cat_quests', 沉浸: 'app.cat_immersion',
+  音效: 'app.cat_audio', 杂项: 'app.cat_misc', 工具: 'app.cat_utilities',
+  环境: 'app.cat_environment', 模型贴图: 'app.cat_models', 法印: 'app.cat_magic',
+  炼金: 'app.cat_alchemy', 角色: 'app.cat_characters', 地点: 'app.cat_locations',
+  建筑: 'app.cat_buildings', 技能: 'app.cat_skills', 大修: 'app.cat_overhauls',
+  未分类: 'app.cat_uncategorized', 其他: 'app.cat_other',
+};
+const catLabel = c => T(CAT_KEY[catCN(c)] || 'app.cat_other');
 
 /* 分组色相：同一分类用同一个色相，卡片之间有色差但不会互相打架。
    只在封面底色里透一点点，靠深浅而不是靠鲜艳来区分。 */
@@ -110,7 +123,7 @@ function toast(msg, ms = 2200, action = null) {
   if (action) {
     const b = document.createElement('button');
     b.className = 'toast-action';
-    b.textContent = action.label || '撤销';
+    b.textContent = action.label || T('app.undo');
     b.onclick = () => { el.remove(); action.fn(); };
     el.appendChild(b);
     ms = Math.max(ms, 5200);          // 有按钮就多留一会儿，别刚看见就消失
@@ -123,16 +136,16 @@ function toast(msg, ms = 2200, action = null) {
 async function undoNow() {
   try {
     const r = await api('/api/undo', {});
-    toast(r.message ? `已撤销：${r.message}` : '已撤销');
+    toast(r.message ? T('app.undo_done_msg', { msg: r.message }) : T('app.undo_done'));
     await load();
-  } catch (e) { toast('撤销失败：' + e.message, 4000); }
+  } catch (e) { toast(T('app.undo_failed', { msg: e.message }), 4000); }
 }
 
 /* ---------- 站内文本输入 ----------
    浏览器自带的 prompt() 在 Edge 的 --app 窗口里样式和整站割裂、拿不到
    输入法的候选框，还可能被企业策略整个屏蔽。这里自己画一个。
    刻意不复用弹窗：它要能在别的弹窗上面用（比如设置页里改路径）。 */
-function askText({ title = '请输入', label = '', value = '', placeholder = '', okText = '确定', maxlength = 120 } = {}) {
+function askText({ title = T('app.ask_title'), label = '', value = '', placeholder = '', okText = T('common.ok'), maxlength = 120 } = {}) {
   return new Promise(resolve => {
     const mask = document.createElement('div');
     mask.className = 'ask-mask';
@@ -143,7 +156,7 @@ function askText({ title = '请输入', label = '', value = '', placeholder = ''
         <input class="ask-input" id="askInput" value="${esc(value)}"
                placeholder="${esc(placeholder)}" maxlength="${maxlength}" spellcheck="false">
         <div class="ask-actions">
-          <button class="btn" id="askCancel">取消</button>
+          <button class="btn" id="askCancel">${T('common.cancel')}</button>
           <button class="btn btn-primary" id="askOk">${esc(okText)}</button>
         </div>
       </div>`;
@@ -177,7 +190,7 @@ async function openNexus(url) {
 /* ---------- 载入 ---------- */
 async function load(refresh = false) {
   $('#btnRefresh').classList.add('is-spinning');
-  $('#stGame').textContent = '正在扫描…';
+  $('#stGame').textContent = T('app.scanning');
   try {
     if (refresh) await api('/api/refresh', {});
     const d = await api('/api/state');
@@ -185,8 +198,8 @@ async function load(refresh = false) {
     S.mods = d.scan ? d.scan.mods : [];
     renderAll();
   } catch (e) {
-    $('#stGame').textContent = '连接失败：' + e.message;
-    toast('扫描失败：' + e.message, 4000);
+    $('#stGame').textContent = T('app.connect_failed', { msg: e.message });
+    toast(T('app.scan_failed', { msg: e.message }), 4000);
   } finally {
     $('#btnRefresh').classList.remove('is-spinning');
   }
@@ -216,19 +229,19 @@ function renderSidebar() {
   // 分组归用户自己管，下面「我的分组」才是真正的分类工具。
   $('#navGroups').innerHTML =
     `<button class="nav-item ${S.filter.type === 'all' ? 'is-on' : ''}" data-t="all" data-v="">
-      <span>全部模组</span><em>${S.mods.length}</em></button>`;
+      <span>${T('ui.all_mods')}</span><em>${S.mods.length}</em></button>`;
 
   // 我的分组（可以把卡片直接拖到这里）
   const lib = S.data?.library || { groups: [], tags: [] };
   const mine = $('#navMine');
   if (mine) {
     if (!lib.groups.length) {
-      mine.innerHTML = `<div class="side-empty">点右上「+」新建一个分组，把卡片拖进去。</div>`;
+      mine.innerHTML = `<div class="side-empty">${T('app.side_empty')}</div>`;
     } else {
       mine.innerHTML = lib.groups.map(gr => {
         const on = S.filter.type === 'group' && S.filter.value === gr.id;
         return `<button class="nav-item ${on ? 'is-on' : ''}" data-t="group" data-v="${esc(gr.id)}"
-          data-drop="group" title="拖卡片到这里">
+          data-drop="group" title="${T('app.drop_hint')}">
           <span>${esc(gr.name)}</span><em>${gr.count}</em></button>`;
       }).join('');
     }
@@ -239,13 +252,13 @@ function renderSidebar() {
   const withDlc = S.mods.filter(m => m.has_dlc).length;
   const mg = S.data?.scan?.merged || {};
   const st = [
-    ['on', '已启用', on],
-    ['off', '已禁用', S.mods.length - on],
-    ['update', '有更新', upd],
-    ['dlc', '含 DLC', withDlc],
+    ['on', T('common.enabled'), on],
+    ['off', T('common.disabled'), S.mods.length - on],
+    ['update', T('app.st_update'), upd],
+    ['dlc', T('app.contains_dlc'), withDlc],
     // 合订本不是用户装的 mod，但必须能看见 —— 2026-10-27 的教训：
     // 它排错位置会让游戏报「找不到函数」，而界面上完全无迹可寻。
-    ['merged', '已合并', mg.exists ? 1 : 0],
+    ['merged', T('app.merged'), mg.exists ? 1 : 0],
   ];
   $('#navStatus').innerHTML = st.map(([t, label, n]) => {
     const hot = S.filter.type === t;
@@ -253,17 +266,17 @@ function renderSidebar() {
       <span>${label}</span><em>${n}</em></button>`;
   }).join('');
 
-  $('#gamePath').textContent = S.data?.config?.game_root || (S.data?.game_found ? '已自动识别' : '未设置');
+  $('#gamePath').textContent = S.data?.config?.game_root || (S.data?.game_found ? T('app.auto_detected') : T('ui.unset'));
   // 游戏版本：主菜单角标上那个（5.01c）。读不到就整块不显示。
   const gv = S.data?.game_version || {};
   const gvEl = $('#gameVer');
   if (gvEl) {
-    gvEl.textContent = gv.version ? `游戏版本 ${gv.version}` : '';
+    gvEl.textContent = gv.version ? T('app.game_version', { version: gv.version }) : '';
     gvEl.hidden = !gv.version;
     gvEl.title = !gv.version ? ''
       : (gv.src === 'pe'
-        ? '从 witcher3.exe 的文件版本读出来的 —— 和主菜单角标可能不是同一套写法'
-        : '从 witcher3.exe 里读到的版本号，和主菜单角标一致');
+        ? T('app.game_ver_from_pe')
+        : T('app.game_ver_exact'));
   }
 }
 
@@ -361,9 +374,7 @@ function renderLock() {
   bar.hidden = !on;
   if (on && !bar.dataset.done) {
     bar.dataset.done = '1';
-    bar.innerHTML = `<b>游戏正在运行</b>
-      <span>所有会改游戏文件的按钮都锁住了 —— 游戏正读着这些文件，这时候改轻则白改，重则配置或存档出问题。
-      关掉游戏后这里会自动恢复。</span>`;
+    bar.innerHTML = T('app.lock_bar');
   }
   if (!on) delete bar.dataset.done;
 }
@@ -374,7 +385,7 @@ document.addEventListener('click', e => {
   if (!hit) return;
   e.preventDefault();
   e.stopPropagation();
-  toast('游戏正在运行，先关掉它再来改', 3200);
+  toast(T('app.game_running_edit'), 3200);
 }, true);
 
 /* 游戏是不是还开着，界面得自己知道 —— 起游戏、关游戏都不会通知我们。
@@ -386,7 +397,7 @@ setInterval(async () => {
       if (S.data) S.data.game_running = !!j.game_running;
       renderLock();
       renderStatus();
-      toast(j.game_running ? '检测到游戏已启动，写入已锁定' : '游戏已关闭，可以继续操作', 3000);
+      toast(j.game_running ? T('app.game_started') : T('app.game_closed'), 3000);
     }
   } catch { /* 服务还没起来或者正在退出，下一轮再说 */ }
 }, 15000);
@@ -398,14 +409,14 @@ function renderList() {
 
   const list = visibleMods();
   const on = S.mods.filter(m => m.enabled).length;
-  $('#viewMeta').textContent = `已启用 ${on} / ${S.mods.length}`;
+  $('#viewMeta').textContent = T('app.view_meta', { on, total: S.mods.length });
   const lib = S.data?.library || { groups: [] };
   const grp = lib.groups.find(x => x.id === S.filter.value);
-  $('#viewTitle').textContent = S.filter.type === 'all' ? '全部模组'
-    : S.filter.type === 'cat' ? S.filter.value
-    : S.filter.type === 'group' ? (grp ? grp.name : '分组')
+  $('#viewTitle').textContent = S.filter.type === 'all' ? T('ui.all_mods')
+    : S.filter.type === 'cat' ? T(CAT_KEY[S.filter.value] || 'app.cat_other')
+    : S.filter.type === 'group' ? (grp ? grp.name : T('app.group_fallback'))
     : S.filter.type === 'tag' ? `#${S.filter.value}`
-    : { on: '已启用', off: '已禁用', update: '有更新', dlc: '含 DLC', merged: '已合并' }[S.filter.type] || '全部模组';
+    : { on: T('common.enabled'), off: T('common.disabled'), update: T('app.st_update'), dlc: T('app.contains_dlc'), merged: T('app.merged') }[S.filter.type] || T('ui.all_mods');
 
   $('#empty').hidden = list.length > 0;
   if (!list.length) {
@@ -427,8 +438,8 @@ function renderList() {
     // 封面只放一个最要紧的标记，多了就是噪音
     const badges = [];
     const cf = conflictsOf(m.key);
-    if (m.update_available) badges.push(`<span class="badge badge-danger">可更新</span>`);
-    else if (cf.length) badges.push(`<span class="badge badge-warn">注意</span>`);
+    if (m.update_available) badges.push(`<span class="badge badge-danger">${T('app.badge_update')}</span>`);
+    else if (cf.length) badges.push(`<span class="badge badge-warn">${T('app.badge_attention')}</span>`);
 
     const cover = m.thumbnail
       ? `<img src="/${esc(m.thumbnail)}" alt="" loading="lazy" onerror="this.remove()">`
@@ -441,21 +452,21 @@ function renderList() {
 
     return `<article class="card ${m.enabled ? '' : 'is-off'} ${sel} ${ro ? 'is-merged' : ''} ${related.has(m.key) ? 'is-related' : ''} ${picked ? 'is-picked' : ''}"
       data-key="${esc(m.key)}" draggable="${ro || S.picking ? 'false' : 'true'}" style="--h:${hueOf(m)}">
-      ${S.picking && !ro ? `<button class="pick ${picked ? 'is-on' : ''}" data-act="pick" title="${picked ? '取消选择' : '选中'}"></button>` : ''}
-      ${ro ? '' : `<button class="switch ${m.enabled ? 'is-on' : ''}" data-act="toggle" title="${m.enabled ? '点击禁用' : '点击启用'}"></button>`}
+      ${S.picking && !ro ? `<button class="pick ${picked ? 'is-on' : ''}" data-act="pick" title="${picked ? T('app.pick_cancel') : T('app.pick_select')}"></button>` : ''}
+      ${ro ? '' : `<button class="switch ${m.enabled ? 'is-on' : ''}" data-act="toggle" title="${m.enabled ? T('app.click_disable') : T('app.click_enable')}"></button>`}
       <div class="cover">
         ${cover}
         ${m.thumbnail ? '' : `<div class="cover-initial">${esc(ro ? 'MG' : initials(m.name))}</div>`}
-        <div class="cover-badges">${ro ? '<span class="badge badge-ok">只读</span>' : badges.join('')}</div>
+        <div class="cover-badges">${ro ? `<span class="badge badge-ok">${T('app.readonly')}</span>` : badges.join('')}</div>
       </div>
       <div class="card-body">
         <div class="card-name">${esc(m.name_cn || m.name)}</div>
         <div class="card-sub">${ro
-          ? `合订本 · ${m.file_count} 个脚本`
-          : (m.name_cn ? esc(m.name) : esc(catCN(m.category)) + (m.author ? ' · ' + esc(m.author) : ''))}</div>
+          ? TN('app.merged_card_one', 'app.merged_card_many', m.file_count)
+          : (m.name_cn ? esc(m.name) : esc(catLabel(m.category)) + (m.author ? ' · ' + esc(m.author) : ''))}</div>
       </div>
-      <span class="list-cat">${esc(catCN(m.category))}</span>
-      <span class="list-state">${ro ? '自动置顶' : (m.enabled ? '已启用' : '已禁用')}</span>
+      <span class="list-cat">${esc(catLabel(m.category))}</span>
+      <span class="list-state">${ro ? T('app.auto_top') : (m.enabled ? T('common.enabled') : T('common.disabled'))}</span>
       <span class="list-badge">${badges[0] || ''}</span>
       <span class="list-prio">${m.priority ?? '—'}</span>
     </article>`;
@@ -491,11 +502,11 @@ function renderPickBar() {
   if (!S.picking) return;
   const n = S.picked.size;
   const all = pickableMods();
-  $('#pickCount').textContent = n;
+  $('#pickCountBox').textContent = T('ui.pick_selected', { n });
   $('#pickOn').disabled = !n;
   $('#pickOff').disabled = !n;
   $('#pickAll').disabled = !all.length;
-  $('#pickAll').textContent = n && n >= all.length ? '全不选' : '全选';
+  $('#pickAll').textContent = n && n >= all.length ? T('app.pick_none') : T('ui.pick_all');
 }
 
 async function batchToggle(enabled) {
@@ -504,15 +515,21 @@ async function batchToggle(enabled) {
   const btn = enabled ? $('#pickOn') : $('#pickOff');
   const old = btn.textContent;
   btn.disabled = true;
-  btn.textContent = '处理中…';
+  btn.textContent = T('app.processing');
   try {
     const r = await api('/api/mods/batch_toggle', { keys, enabled });
     setPicking(false);
     await load(true);
     // 禁用/启用都是改文件夹名（加或去掉 `~`），不再动 mods.settings
-    const tail = r.renamed ? `（${r.renamed} 个文件夹已改名）` : '';
-    toast(`${enabled ? '启用' : '禁用'}了 ${r.count} 个模组${tail}`, 4200,
-      { label: '撤销', fn: undoNow });
+    const msg = r.renamed
+      ? TN(enabled ? 'app.batch_on_renamed_one' : 'app.batch_off_renamed_one',
+        enabled ? 'app.batch_on_renamed_many' : 'app.batch_off_renamed_many',
+        r.count, { renamed: r.renamed })
+      : TN(enabled ? 'app.batch_on_one' : 'app.batch_off_one',
+        enabled ? 'app.batch_on_many' : 'app.batch_off_many',
+        r.count);
+    toast(msg, 4200,
+      { label: T('app.undo'), fn: undoNow });
     refreshJournal();
   } catch (e) {
     toast(e.message, 5200);
@@ -542,27 +559,26 @@ function renderEmptyState() {
   // 这条以前从没被走过：开发机上永远是「已自动识别」。发布版第一个用户
   // 撞上的就是它，所以它得说清楚下一步点哪儿。
   const noGame = !S.data?.game_found;
-  let title = '没有匹配的模组';
-  let sub = '换个关键词试试。';
+  let title = T('ui.empty_title');
+  let sub = T('ui.empty_sub');
   if (noGame) {
-    title = '没找到《巫师 3》';
-    sub = '选游戏根目录：那一层里要有 bin 文件夹（不是 bin 里面那一层）。'
-        + ' Steam 版一般是 …\\steamapps\\common\\The Witcher 3';
+    title = T('app.empty_no_game_title');
+    sub = T('app.empty_no_game_sub');
   } else if (q) {
-    title = `没有找到「${q}」`;
-    sub = '换个关键词，或者把搜索清掉。';
+    title = T('app.empty_search_title', { q });
+    sub = T('app.empty_search_sub');
   } else if (f === 'group') {
-    title = '这个分组还是空的';
-    sub = '把卡片直接拖到左侧的分组名字上就能加进来。';
+    title = T('app.empty_group_title');
+    sub = T('app.empty_group_sub');
   } else if (f === 'update') {
-    title = '没有可更新的模组';
-    sub = '所有模组都已经是 Nexus 上的最新版。';
+    title = T('app.empty_update_title');
+    sub = T('app.empty_update_sub');
   } else if (f === 'merged') {
-    title = '还没有合并过的脚本';
-    sub = '两个模组改同一个脚本时，Script Merger 才会生成合订本。';
+    title = T('app.empty_merged_title');
+    sub = T('app.empty_merged_sub');
   } else if (f !== 'all') {
-    title = '这个分类里是空的';
-    sub = '回「全部模组」看看其它模组。';
+    title = T('app.empty_cat_title');
+    sub = T('app.empty_cat_sub');
   }
   $('#emptyTitle').textContent = title;
   $('#emptySub').textContent = sub;
@@ -595,20 +611,23 @@ function renderSyncBar() {
   const both = showIds && showUpd;
   const parts = [];
   if (showIds) {
-    parts.push(`<b>${ids.unknown} 个模组还没对上 Nexus</b>
+    parts.push(`<b>${TN('app.sync_ids_one', 'app.sync_ids_many', ids.unknown)}</b>
       ${both ? '' : `<span>${ids.guessed
-        ? `已找到 ${ids.guessed} 组候选，点一下确认`
-        : '对上号才能自动查更新、显示封面和作者'}</span>`}
-      <button class="link-btn" id="syncIds">去确认</button>`);
+        ? TN('app.sync_guess_one', 'app.sync_guess_many', ids.guessed)
+        : T('app.sync_ids_why')}</span>`}
+      <button class="link-btn" id="syncIds">${T('app.sync_go_confirm')}</button>`);
   }
   if (showUpd) {
-    const names = (u.names || []).join('、');
-    parts.push(`<b>${u.count} 个模组有新版本</b>
-      ${both ? '' : `<span>${esc(names)}${u.count > (u.names || []).length ? ' 等' : ''}</span>`}
-      <button class="link-btn" id="syncOpen">看看有哪些</button>`);
+    // 分隔符跟语言走：英文用逗号加空格，别把顿号带过去
+    const names = (u.names || []).join(I18N_LANG === 'zh' ? '、' : ', ');
+    parts.push(`<b>${TN('app.sync_upd_one', 'app.sync_upd_many', u.count)}</b>
+      ${both ? '' : `<span>${u.count > (u.names || []).length
+        ? T('app.sync_names_more', { names: esc(names) })
+        : esc(names)}</span>`}
+      <button class="link-btn" id="syncOpen">${T('app.sync_upd_see')}</button>`);
   }
   bar.innerHTML = parts.join('<i class="bar-div"></i>')
-    + '<button class="bar-x" id="syncX" title="这次先不看">忽略</button>';
+    + `<button class="bar-x" id="syncX" title="${T('ui.upd_ignore')}">${T('app.ignore')}</button>`;
 
   const go = $('#syncIds');
   if (go) go.onclick = () => openTrackDialog('missing');
@@ -631,9 +650,9 @@ function renderWarn() {
   const bar = $('#warnBar');
   if (!ws.length) { bar.hidden = true; bar.innerHTML = ''; return; }
   bar.hidden = false;
-  bar.innerHTML = `<b>${ws.length} 处需要注意</b><span>${esc(ws[0].message)}</span>
-    <button class="link-btn" id="warnMore">查看全部</button>
-    <button class="bar-x" id="warnIgnore" title="忽略这些提示，以后内容变了才再提醒">忽略</button>`;
+  bar.innerHTML = `<b>${TN('app.warn_title_one', 'app.warn_title_many', ws.length)}</b><span>${esc(ws[0].message)}</span>
+    <button class="link-btn" id="warnMore">${T('app.warn_see_all')}</button>
+    <button class="bar-x" id="warnIgnore" title="${T('app.warn_ignore_title')}">${T('app.ignore')}</button>`;
   $('#warnMore').onclick = () => {
     toast(ws.map(w => '· ' + w.message).join('\n'), 6000);
   };
@@ -642,7 +661,7 @@ function renderWarn() {
       const r = await api('/api/ui/dismiss', { kind: 'warn', keys: ws.map(w => w.key) });
       if (r.ui) S.data.ui = r.ui;
       renderWarn();
-      toast('已忽略。以后只有新的问题才会再提醒');
+      toast(T('app.warn_ignored'));
     } catch (e) { toast(e.message, 3500); }
   };
 }
@@ -655,11 +674,11 @@ function renderGameDot() {
   const live = $('#stGame');
   if (!d || !live) return;
   if (!d.game_found) {
-    live.innerHTML = `<span class="dot-idle"></span>未找到游戏目录`;
+    live.innerHTML = T('app.dot_no_game');
   } else if (d.game_running) {
-    live.innerHTML = `<span class="dot-warn"></span>游戏正在运行，先别改文件`;
+    live.innerHTML = T('app.dot_running');
   } else {
-    live.innerHTML = `<span class="dot-live"></span>游戏已关闭，可以安全部署`;
+    live.innerHTML = T('app.dot_safe');
   }
 }
 
@@ -667,7 +686,7 @@ function renderStatus() {
   const d = S.data;
   if (!d) return;
   renderGameDot();
-  $('#stScan').textContent = d.scan ? `上次扫描 ${d.scan.scanned_at.replace('T', ' ').slice(5, 16)}` : '';
+  $('#stScan').textContent = d.scan ? T('app.last_scan', { time: d.scan.scanned_at.replace('T', ' ').slice(5, 16) }) : '';
 
   // 「下载目录有新包」这条提示 1.0.7 起撤掉了：包的数量不代表任何需要处理的事，
   // 真正要装的时候从侧边栏「导入压缩包」进去就行。侧边栏的入口一直在。
@@ -689,18 +708,18 @@ function renderUpdatesChip() {
   if (!upd || dis) { pill.hidden = true; return; }
   pill.hidden = false;
   const txt = $('#btnUpdates');
-  if (txt) txt.textContent = `${upd} 个可更新`;
+  if (txt) txt.textContent = T('ui.upd_pill', { n: upd });
 }
 
 async function ignoreUpdates() {
   const sig = S.data?.ui?.updates?.sig || '';
-  if (!sig) { toast('暂时没有可忽略的提示', 2500); return; }
+  if (!sig) { toast(T('app.no_ignorable'), 2500); return; }
   try {
     const r = await api('/api/ui/dismiss', { kind: 'upd', sig });
     if (r.ui) S.data.ui = r.ui;
     renderUpdatesChip();
     renderSyncBar();
-    toast('已忽略这一批。等哪天真又冒出新版本，它会再提醒你', 3600);
+    toast(T('app.upd_ignored'), 3600);
   } catch (e) { toast(e.message, 3500); }
 }
 
@@ -712,7 +731,7 @@ async function refreshJournal() {
     if (S.data) S.data.game_running = !!j.game_running;
     const btn = $('#btnUndo');
     btn.disabled = JOURNAL.length === 0 || j.game_running;
-    btn.title = j.game_running ? '游戏运行中，不能撤销' : (JOURNAL[0] ? `撤销「${JOURNAL[0].label}」` : '没有可撤销的操作');
+    btn.title = j.game_running ? T('app.undo_blocked') : (JOURNAL[0] ? T('app.undo_what', { what: JOURNAL[0].label }) : T('app.undo_nothing'));
 
     // 状态栏的「最近一条」：刚发生了什么，不用点开日志也能看见。
     const rec = $('#stRecent');
@@ -723,7 +742,7 @@ async function refreshJournal() {
         rec.innerHTML = `<span class="st-tick">✓</span>`
           + `<span>${esc(JOURNAL[0].label)}</span>`
           + (t ? `<em>${esc(t)}</em>` : '');
-        rec.title = '点开看最近的操作记录（可逐条撤销）';
+        rec.title = T('app.recent_title');
       } else {
         rec.hidden = true;
         rec.innerHTML = '';
@@ -794,20 +813,20 @@ function renderMergedDetails(m) {
   const detail = mg.detail || [];
 
   const rows = [
-    ['状态', mg.ok
-      ? '<span class="ok">正常生效</span>'
-      : `<span class="bad">${esc(mg.problem || '不生效')}</span>`],
-    ['加载顺序', `${m.priority ?? '—'}<span class="drow-note">比所有模组都靠前才算对</span>`],
-    ['合并文件', `${m.file_count} 个脚本`],
-    ['登记状态', mg.entry ? 'mods.settings 里有' : 'mods.settings 里<b>没有</b>'],
+    [T('app.row_status'), mg.ok
+      ? `<span class="ok">${T('app.merged_ok')}</span>`
+      : `<span class="bad">${esc(mg.problem || T('app.merged_not_working'))}</span>`],
+    [T('ui.nav_order'), `${m.priority ?? '—'}<span class="drow-note">${T('app.merged_prio_note')}</span>`],
+    [T('app.merged_files_row'), TN('app.scripts_one', 'app.scripts_many', m.file_count)],
+    [T('app.merged_entry_row'), mg.entry ? T('app.merged_in_settings') : T('app.merged_not_in_settings')],
   ];
 
   const groups = detail.map(d => {
     const srcs = (d.sources || []).map(s =>
-      `<span class="tag ${s.present ? '' : 'tag-bad'}">${esc(s.name)}${s.present ? '' : ' · 已不在硬盘'}</span>`).join('');
+      `<span class="tag ${s.present ? '' : 'tag-bad'}">${s.present ? esc(s.name) : T('app.tag_missing', { name: esc(s.name) })}</span>`).join('');
     return `<div class="mg-group">
-      <div class="mg-rel"><code>${esc(d.rel)}</code>${d.in_product ? '' : '<span class="mg-miss">产物里找不到这个文件</span>'}</div>
-      <div class="tag-row">${srcs || '<span class="muted">台账没记来源</span>'}</div>
+      <div class="mg-rel"><code>${esc(d.rel)}</code>${d.in_product ? '' : `<span class="mg-miss">${T('app.merged_missing_file')}</span>`}</div>
+      <div class="tag-row">${srcs || `<span class="muted">${T('app.merged_no_src')}</span>`}</div>
     </div>`;
   }).join('');
 
@@ -816,28 +835,25 @@ function renderMergedDetails(m) {
       <div class="cover-initial">MG</div>
     </div>
     <div class="detail-name">${esc(m.name)}</div>
-    <div class="detail-sub">Script Merger 合订本 · 不是模组</div>
+    <div class="detail-sub">${T('app.merged_sub')}</div>
 
     <div class="detail-rows">
       ${rows.map(([k, v]) => `<div class="drow"><span>${k}</span><span>${v}</span></div>`).join('')}
     </div>
 
     <div class="detail-section">
-      <h3>合并了哪些脚本</h3>
-      <div class="mg-list">${groups || '<div class="muted" style="font-size:11px">台账里没有合并记录。</div>'}</div>
+      <h3>${T('app.merged_which_scripts')}</h3>
+      <div class="mg-list">${groups || `<div class="muted" style="font-size:11px">${T('app.merged_no_record')}</div>`}</div>
     </div>
 
     <div class="detail-section">
-      <h3>为什么动不得</h3>
-      <div class="detail-summary">这个文件夹里放的是「几个模组改同一个脚本」的合成结果。
-      它必须排在所有模组之前加载，否则原文件会把合成结果盖掉 ——
-      游戏启动就报「Could not find function ...」，但报错只会指向来源模组，看不出真正原因。
-      这里只做展示，启用/禁用/排序交给下面的按钮。</div>
+      <h3>${T('app.merged_why_title')}</h3>
+      <div class="detail-summary">${T('app.merged_why_body')}</div>
     </div>
 
     <div class="detail-actions">
-      <button class="btn" data-act="conflicts">去冲突检查</button>
-      <button class="btn btn-ghost" data-act="mergerOpen">打开 Script Merger</button>
+      <button class="btn" data-act="conflicts">${T('app.go_conflicts')}</button>
+      <button class="btn btn-ghost" data-act="mergerOpen">${T('app.open_merger')}</button>
     </div>`;
 }
 
@@ -848,51 +864,52 @@ function renderDetails(m) {
   body.hidden = false;
 
   const srcTag = m.version_src
-    ? `<span class="drow-src">${esc({ manual: '你填的', manifest: '安装记录', legacy: '历史记录', rmmr: '历史记录', archive: '下载的包', folder: 'mod 自带' }[m.version_src] || '')}</span>`
+    ? `<span class="drow-src">${esc({ manual: T('app.src_manual'), manifest: T('app.src_manifest'), legacy: T('app.src_history'), rmmr: T('app.src_history'), archive: T('app.src_archive'), folder: T('app.src_bundled') }[m.version_src] || '')}</span>`
     : '';
   const liveTag = m.latest_src === 'nexus'
-    ? '<span class="drow-src is-live">刚查到</span>'
-    : (m.latest_src === 'legacy' ? '<span class="drow-src">历史记录</span>' : '');
+    ? `<span class="drow-src is-live">${T('app.src_live')}</span>`
+    : (m.latest_src === 'legacy' ? `<span class="drow-src">${T('app.src_history')}</span>` : '');
   const latest = m.latest_version
     ? `${esc(m.latest_version)}${liveTag}${m.latest_at
       ? `<span class="drow-src">${esc(m.latest_at.slice(0, 10))}</span>` : ''}`
-    : '<span class="muted">还没查到</span>';
+    : `<span class="muted">${T('app.latest_unknown')}</span>`;
 
   // Nexus 页面顶部那个版本号是作者手填的展示值，经常落后于他自己传的主文件。
   // 两个数不一样时把页面值也摆出来，免得你去网页一看对不上就以为算错了。
   // 注意用 span 而不是 div：这一格本身就在 <span> 里，div 会造成非法嵌套。
   const pageNote = (m.page_version && m.latest_version
     && m.page_version !== m.latest_version)
-    ? `<span class="drow-note">页面上显示的是 ${esc(m.page_version)}，那是作者手填的；
-       这里用的是他上传的主文件版本${m.latest_file ? '（' + esc(m.latest_file) + '）' : ''}。</span>`
+    ? `<span class="drow-note">${m.latest_file
+      ? T('app.page_ver_note_file', { page: esc(m.page_version), file: esc(m.latest_file) })
+      : T('app.page_ver_note', { page: esc(m.page_version) })}</span>`
     : '';
 
   // 只留「决定我现在要不要动它」的几行。文件数/体积/安装时间/下载量
   // 是查档案时才看的，塞在这里会把状态和版本挤到需要滚动的位置。
   const rows = [
-    ['状态', m.enabled ? '<span class="ok">已启用</span>' : '已禁用'],
-    ['本地版本', m.version ? esc(m.version) + srcTag : '<span class="muted">未记录</span>'],
-    ['Nexus 版本', latest + pageNote],
-    ...(m.author ? [['作者', esc(m.author)]] : []),
+    [T('app.row_status'), m.enabled ? `<span class="ok">${T('common.enabled')}</span>` : T('common.disabled')],
+    [T('app.row_local_version'), m.version ? esc(m.version) + srcTag : `<span class="muted">${T('app.not_recorded')}</span>`],
+    [T('app.row_nexus_version'), latest + pageNote],
+    ...(m.author ? [[T('common.author'), esc(m.author)]] : []),
     ['Nexus ID', m.nexus_id
       ? `<span class="mono">${esc(m.nexus_id)}</span>`
-      : '<span class="muted">未识别</span>'],
+      : `<span class="muted">${T('app.not_identified')}</span>`],
   ];
 
   const techRows = [
-    ['文件数', m.file_count],
-    ['体积', fmtSize(m.size_bytes)],
-    ['安装时间', fmtDate(m.mtime)],
-    ...(m.downloads ? [['下载量', Number(m.downloads).toLocaleString()]] : []),
+    [T('app.row_file_count'), m.file_count],
+    [T('app.row_size'), fmtSize(m.size_bytes)],
+    [T('app.row_installed_at'), fmtDate(m.mtime)],
+    ...(m.downloads ? [[T('app.row_downloads'), Number(m.downloads).toLocaleString()]] : []),
   ];
 
   const tags = [];
-  if (m.has_scripts) tags.push('脚本');
-  if (m.has_dlc) tags.push('含 DLC');
-  if (m.menu_xmls.length) tags.push(`${m.menu_xmls.length} 个菜单`);
-  if (m.disabled_menu_xmls.length) tags.push(`${m.disabled_menu_xmls.length} 个停用菜单`);
-  if (m.w3strings.length) tags.push(`${m.w3strings.length} 个语言文件`);
-  if (!tags.length) tags.push('纯资源');
+  if (m.has_scripts) tags.push(T('app.tag_scripts'));
+  if (m.has_dlc) tags.push(T('app.contains_dlc'));
+  if (m.menu_xmls.length) tags.push(TN('app.menus_one', 'app.menus_many', m.menu_xmls.length));
+  if (m.disabled_menu_xmls.length) tags.push(TN('app.disabled_menus_one', 'app.disabled_menus_many', m.disabled_menu_xmls.length));
+  if (m.w3strings.length) tags.push(TN('app.langfiles_one', 'app.langfiles_many', m.w3strings.length));
+  if (!tags.length) tags.push(T('app.tag_assets_only'));
 
   const cf = conflictsOf(m.key);
   // 详情面板里只放「会出事」的那几条，标题一行就够 —— 完整说明去冲突检查看。
@@ -902,14 +919,14 @@ function renderDetails(m) {
   const pkg = (S.data?.packages?.active || [])
     .find(p => (p.mods || []).includes(m.key));
   const cfHtml = (cfMain.length || cfRest) ? `    <div class="detail-section">
-      <h3>冲突与注意</h3>
+      <h3>${T('app.conflict_section')}</h3>
       ${cfMain.length ? `<div class="cf-list cf-compact">
         ${cfMain.slice(0, 3).map(it => `<div class="cf-item cf-${it.level}">
           <div class="cf-title">${esc(it.title)}</div>
         </div>`).join('')}
       </div>` : ''}
       <button class="btn btn-sm" data-act="conflicts" style="margin-top:8px;width:100%">
-        打开冲突检查${cfRest ? `（另有 ${cfRest} 条说明）` : ''}</button>
+        ${cfRest ? TN('app.open_conflicts_more_one', 'app.open_conflicts_more_many', cfRest) : T('app.open_conflicts')}</button>
     </div>` : '';
 
   const lib = S.data?.library || { by_key: {}, groups: [] };
@@ -918,21 +935,21 @@ function renderDetails(m) {
   const myGroup = mine.group;
   const groupHtml = `
     <div class="detail-section">
-      <h3>我的分组</h3>
+      <h3>${T('ui.my_groups')}</h3>
       <div class="tag-row">${myGroup
         ? `<span class="tag is-mine">${esc(myGroup.name)}</span>`
-        : '<span class="muted" style="font-size:11px">未分组 · 也可以把卡片拖到左侧分组里</span>'}</div>
+        : `<span class="muted" style="font-size:11px">${T('app.un_grouped')}</span>`}</div>
       ${lib.groups.length ? `<select class="group-sel" id="groupSel">
-        <option value="">— 不分组 —</option>
+        <option value="">${T('app.group_none_option')}</option>
         ${lib.groups.map(g => `<option value="${esc(g.id)}" ${myGroup && myGroup.id === g.id ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}
       </select>` : ''}
     </div>
     <div class="detail-section">
-      <h3>标签</h3>
+      <h3>${T('app.tags_title')}</h3>
       <div class="tag-row">${myTags.length
-        ? myTags.map(t => `<span class="tag tag-rm" data-tag="${esc(t)}" title="点击删除">${esc(t)} ×</span>`).join('')
-        : '<span class="muted" style="font-size:11px">还没有标签</span>'}</div>
-      <div class="tag-edit"><input id="tagInput" placeholder="加标签，回车确认" maxlength="40"></div>
+        ? myTags.map(t => `<span class="tag tag-rm" data-tag="${esc(t)}" title="${T('app.tag_remove_title')}">${esc(t)} ×</span>`).join('')
+        : `<span class="muted" style="font-size:11px">${T('app.no_tags')}</span>`}</div>
+      <div class="tag-edit"><input id="tagInput" placeholder="${T('app.tag_placeholder')}" maxlength="40"></div>
     </div>`;
 
   body.innerHTML = `
@@ -940,16 +957,16 @@ function renderDetails(m) {
       ${m.thumbnail ? `<img src="/${esc(m.thumbnail)}" alt="">` : `<div class="cover-initial">${esc(initials(m.name))}</div>`}
     </div>
     <div class="detail-name">${esc(m.name_cn || m.name)}</div>
-    <div class="detail-sub">${m.name_cn ? esc(m.name) + (m.author ? ' · ' + esc(m.author) : '') : esc(m.author || '未知作者') + (m.category ? ' · ' + esc(m.category) : '')}</div>
+    <div class="detail-sub">${m.name_cn ? esc(m.name) + (m.author ? ' · ' + esc(m.author) : '') : esc(m.author || T('app.unknown_author')) + (m.category ? ' · ' + esc(m.category) : '')}</div>
     ${m.note_cn ? `<div class="detail-note">${esc(m.note_cn)}</div>` : ''}
 
     <div class="detail-quick">
-      <button class="btn ${m.enabled ? '' : 'btn-primary'}" data-act="toggle">${m.enabled ? '禁用' : '启用'}</button>
-      <button class="btn" data-act="folder">打开目录</button>
+      <button class="btn ${m.enabled ? '' : 'btn-primary'}" data-act="toggle">${m.enabled ? T('ui.pick_off') : T('ui.pick_on')}</button>
+      <button class="btn" data-act="folder">${T('app.open_folder')}</button>
       ${m.nexus_id
-        ? `<button class="btn" data-act="nexus">模组页</button>
-           <button class="btn btn-ghost" data-act="nexusFiles">下载页</button>`
-        : `<button class="btn" data-act="findNexus">搜一下是哪个</button>`}
+        ? `<button class="btn" data-act="nexus">${T('app.nexus_page')}</button>
+           <button class="btn btn-ghost" data-act="nexusFiles">${T('app.nexus_files')}</button>`
+        : `<button class="btn" data-act="findNexus">${T('app.find_nexus')}</button>`}
     </div>
 
     ${cfHtml}
@@ -959,39 +976,39 @@ function renderDetails(m) {
     </div>
 
     <div class="detail-section">
-      <h3>包含内容</h3>
+      <h3>${T('app.contains_title')}</h3>
       <div class="tag-row">${tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>
     </div>
 
     ${m.summary ? `<div class="detail-section">
-      <h3>Nexus 上的简介</h3>
+      <h3>${T('app.nexus_summary')}</h3>
       <div class="detail-summary">${esc(m.summary)}</div>
     </div>` : ''}
 
     ${m.name_nexus && m.name_nexus !== m.name && m.name_nexus !== m.name_cn
       ? `<div class="detail-section">
-      <h3>Nexus 上的完整标题</h3>
+      <h3>${T('app.nexus_full_title')}</h3>
       <div class="detail-summary">${esc(m.name_nexus)}</div>
     </div>` : ''}
 
     ${groupHtml}
 
     <div class="detail-section">
-      <h3>加载顺序</h3>
+      <h3>${T('ui.nav_order')}</h3>
       <div class="prio-row">
         <input type="number" id="prioInput" value="${m.priority ?? ''}" placeholder="—" step="10" min="0">
-        <button class="btn" data-act="savePrio" style="height:26px;padding:0 10px">保存</button>
-        <span class="muted" style="font-size:11px">数字越小越先加载</span>
+        <button class="btn" data-act="savePrio" style="height:26px;padding:0 10px">${T('common.save')}</button>
+        <span class="muted" style="font-size:11px">${T('app.prio_hint')}</span>
       </div>
     </div>
 
     <details class="detail-fold">
-      <summary>技术细节</summary>
+      <summary>${T('app.tech_details')}</summary>
       <div class="detail-rows">
         ${techRows.map(([k, v]) => `<div class="drow"><span>${k}</span><span>${v}</span></div>`).join('')}
       </div>
       <div class="detail-section">
-        <h3>文件夹</h3>
+        <h3>${T('app.folders_title')}</h3>
         <div class="tag-row">
           <span class="tag">${esc(m.folder)}</span>
           ${m.dlc_dirs.map(d => `<span class="tag">${esc(d)}</span>`).join('')}
@@ -1001,8 +1018,8 @@ function renderDetails(m) {
 
     ${pkg ? `<div class="detail-danger">
       <button class="btn btn-ghost" data-act="uninstall"
-        title="卸载在「已安装的包」里做，会先让你确认">卸载这个模组…</button>
-      <div class="detail-danger-note">卸载以「包」为单位 —— 当初一起装进来的模组会一起移走</div>
+        title="${T('app.uninstall_title')}">${T('app.uninstall_mod')}</button>
+      <div class="detail-danger-note">${T('app.uninstall_note')}</div>
     </div>` : ''}`;
 }
 
@@ -1028,8 +1045,8 @@ async function saveTags(key, tags) {
       const m = S.mods.find(x => x.key === key);
       if (m) renderDetails(m);
     }
-    toast(tags.length ? '标签已更新' : '标签已清空');
-  } catch (e) { toast('保存失败：' + e.message, 4000); }
+    toast(tags.length ? T('app.tags_updated') : T('app.tags_cleared'));
+  } catch (e) { toast(T('app.save_failed', { msg: e.message }), 4000); }
 }
 
 async function addToGroup(gid, key) {
@@ -1043,16 +1060,16 @@ async function addToGroup(gid, key) {
       const m = S.mods.find(x => x.key === key);
       if (m) renderDetails(m);
     }
-    toast(`已加入「${g ? g.name : '分组'}」`);
-  } catch (e) { toast('加入失败：' + e.message, 4000); }
+    toast(T('app.group_added', { name: g ? g.name : T('app.group_fallback') }));
+  } catch (e) { toast(T('app.join_failed', { msg: e.message }), 4000); }
 }
 
 async function newGroup() {
   const name = await askText({
-    title: '新建分组',
-    label: '给分组起个名字，比如「画面增强」「必备」「整合包 A」',
-    placeholder: '分组名字',
-    okText: '建这个分组',
+    title: T('ui.new_group'),
+    label: T('app.new_group_label'),
+    placeholder: T('app.new_group_ph'),
+    okText: T('app.new_group_ok'),
     maxlength: 40,
   });
   if (!name) return;
@@ -1061,8 +1078,8 @@ async function newGroup() {
     S.data.library = await api('/api/library');
     S.filter = { type: 'group', value: r.group.id };
     renderSidebar(); renderList();
-    toast(`分组「${r.group.name}」建好了，把卡片拖进来`);
-  } catch (e) { toast('新建失败：' + e.message, 4000); }
+    toast(T('app.group_created', { name: r.group.name }));
+  } catch (e) { toast(T('app.create_failed', { msg: e.message }), 4000); }
 }
 
 /* ---------- 交互 ---------- */
@@ -1132,7 +1149,7 @@ document.addEventListener('click', async (e) => {
     } else if (a === 'mergerOpen') {
       act.disabled = true;
       api('/api/merger/open', {})
-        .then(() => toast('Script Merger 已启动', 4000))
+        .then(() => toast(T('app.merger_started'), 4000))
         .catch(err => toast(err.message, 6000))
         .finally(() => { act.disabled = false; });
     } else if (a === 'nexus' && m?.nexus_id) {
@@ -1145,7 +1162,7 @@ document.addEventListener('click', async (e) => {
       else openNexus(`https://www.nexusmods.com/witcher3/search/?gsearch=${encodeURIComponent(m.name || '')}&gsearchtype=mods`);
     } else if (a === 'folder' && m) {
       try { await api('/api/open-folder', { key: m.key }); }
-      catch (err) { toast('打不开：' + err.message); }
+      catch (err) { toast(T('app.open_folder_failed', { msg: err.message })); }
     } else if (a === 'uninstall' && m) {
       if (typeof openPackagesDialog === 'function') {
         const p = (S.data?.packages?.active || [])
@@ -1154,14 +1171,14 @@ document.addEventListener('click', async (e) => {
       }
     } else if (a === 'savePrio' && m) {
       const v = parseInt($('#prioInput').value, 10);
-      if (Number.isNaN(v)) return toast('请填一个数字');
+      if (Number.isNaN(v)) return toast(T('app.need_number'));
       try {
         await api('/api/mods/priority', { key: m.key, priority: v });
         m.priority = v;
         renderList(); renderDetails(m);
-        toast(`「${m.name}」顺序改为 ${v}`, 3200, { label: '撤销', fn: undoNow });
+        toast(T('app.prio_changed', { name: m.name, n: v }), 3200, { label: T('app.undo'), fn: undoNow });
         refreshJournal();
-      } catch (err) { toast('保存失败：' + err.message, 4000); }
+      } catch (err) { toast(T('app.save_failed', { msg: err.message }), 4000); }
     }
   }
 });
@@ -1192,14 +1209,14 @@ async function pollMerger() {
   let msg;
   if (now.merge !== prev.merge) {
     msg = now.merge < prev.merge
-      ? `合并完成 · 待合并 ${prev.merge} → ${now.merge}`
-      : `台账变了 · 待合并 ${prev.merge} → ${now.merge}`;
+      ? T('app.poll_merge_done', { from: prev.merge, to: now.merge })
+      : T('app.poll_digest_changed', { from: prev.merge, to: now.merge });
   } else if (now.merged !== prev.merged) {
-    msg = `合并记录更新了 · 已合并 ${now.merged} 组`;
+    msg = T('app.poll_merged_updated', { n: now.merged });
   } else {
-    msg = 'Script Merger 的台账变了，已经重新检查';
+    msg = T('app.poll_ledger_changed');
   }
-  if (!now.merge && !now.warn) msg += '，现在没有要处理的东西';
+  if (!now.merge && !now.warn) msg = T('app.poll_nothing', { msg });
   toast(msg, 5600);
 }
 
@@ -1224,8 +1241,8 @@ async function openConflictsDialog(force = false, quiet = false) {
   // 1.1.1 起条目变多了（资源包竞争、注解叠加、文字表版本…），平铺一列会看不清。
   // 按「这是哪一类问题」分组，组内按严重程度排。分类表放前端，后端只管产出。
   const CF_CAT = {
-    merge: '脚本合并', res: '界面与资源', script: '脚本行为',
-    text: '文字显示', other: '其它',
+    merge: 'app.cf_cat_merge', res: 'app.cf_cat_res', script: 'app.cf_cat_script',
+    text: 'app.cf_cat_text', other: 'app.cf_cat_other',
   };
   const CF_MAP = {
     script_overlap: 'merge', script_merged: 'merge', merge_stale: 'merge',
@@ -1244,7 +1261,7 @@ async function openConflictsDialog(force = false, quiet = false) {
         .map(k => `<button class="tag cf-mod" data-jump="${esc(k)}">${esc(k)}</button>`).join('')}</div>` : ''}
       ${(it.files || []).length ? `<div class="cf-files">${it.files.slice(0, 6)
         .map(f => `<code>${esc(f)}</code>`).join('')}${it.files.length > 6
-        ? `<span class="muted">…共 ${it.files.length} 个</span>` : ''}</div>` : ''}
+        ? `<span class="muted">${T('app.cf_files_more', { n: it.files.length })}</span>` : ''}</div>` : ''}
     </div>`;
 
   const grouped = {};
@@ -1257,15 +1274,14 @@ async function openConflictsDialog(force = false, quiet = false) {
     .filter(c => grouped[c])
     .map(c => `
       <div class="cf-group">
-        <div class="cf-group-title">${CF_CAT[c]}<em>${grouped[c].length}</em></div>
+        <div class="cf-group-title">${T(CF_CAT[c])}<em>${grouped[c].length}</em></div>
         ${grouped[c]
           .sort((a, b) => (LV_ORDER[a.level] ?? 9) - (LV_ORDER[b.level] ?? 9))
           .map(cardHtml).join('')}
       </div>`).join('') : `
     <div class="cf-empty">
-      <div class="cf-empty-title">没有发现冲突</div>
-      <div class="cf-empty-sub">${st.script_files || 0} 个脚本之间没有同名覆盖，
-        ${st.bundle_mods || 0} 个资源包里也没有抢同一个界面文件，菜单和加载顺序都没撞车。</div>
+      <div class="cf-empty-title">${T('app.cf_none_title')}</div>
+      <div class="cf-empty-sub">${T('app.cf_none_sub', { scripts: st.script_files || 0, bundles: st.bundle_mods || 0 })}</div>
     </div>`;
 
   // Script Merger 只在真的还有未合并的脚本、或合并记录失效时才值得启动。
@@ -1280,46 +1296,46 @@ async function openConflictsDialog(force = false, quiet = false) {
   const mergeBar = !mg.found ? `
     <div class="merge-bar is-miss">
       <div class="merge-bar-txt">
-        <b>没检测到 Script Merger</b>
-        ${gone ? `<span>之前指定过 <code>${esc(gone)}</code>，但现在这个文件找不到了 —— 是被删了还是盘符变了？</span>
-          ` : `<span>两个模组改同一个脚本文件时，游戏只会加载其中一个，要用它合成一份。</span>`}
-        <span class="merge-why">次世代版的新模组一般不用合并，装了很多旧模组或启动报脚本错误时才用它。</span>
+        <b>${T('app.cf_merger_missing')}</b>
+        ${gone ? `<span>${T('app.cf_merger_gone', { path: esc(gone) })}</span>
+          ` : `<span>${T('app.cf_merger_why')}</span>`}
+        <span class="merge-why">${T('app.cf_merger_note')}</span>
       </div>
       <div class="merge-bar-acts">
-        <button class="btn btn-sm" id="cfMergeNexus">去 Nexus 下载</button>
-        <button class="btn btn-sm ${gone ? 'btn-primary' : ''}" id="cfMergeLocate">${gone ? '重新指定位置' : '我已装好，指定位置'}</button>
+        <button class="btn btn-sm" id="cfMergeNexus">${T('app.cf_merger_dl')}</button>
+        <button class="btn btn-sm ${gone ? 'btn-primary' : ''}" id="cfMergeLocate">${gone ? T('app.cf_merger_relocate') : T('app.cf_merger_locate')}</button>
       </div>
     </div>` : (bad ? `
     <div class="merge-bar is-bad">
       <div class="merge-bar-txt">
-        <b>合订本不生效</b>
+        <b>${T('app.cf_merged_bad')}</b>
         <span>${esc(mg.problem)}</span>
       </div>
-      <button class="btn btn-sm btn-primary" id="cfMergeFix">去加载顺序修</button>
+      <button class="btn btn-sm btn-primary" id="cfMergeFix">${T('app.cf_merged_fix')}</button>
     </div>` : `
     <div class="merge-bar">
       <div class="merge-bar-txt">
-        <b>Script Merger 已就位${mg.custom ? '（你指定的位置）' : ''}</b>
-        <span>合并由它自己做，会直接改写 mods 目录。本程序只负责启动。
-          ${mg.custom ? '<button class="link-btn" id="cfMergeReset">改回自动查找</button>' : ''}</span>
+        <b>${mg.custom ? T('app.cf_merger_ready_custom') : T('app.cf_merger_ready')}</b>
+        <span>${T('app.cf_merger_desc')}
+          ${mg.custom ? `<button class="link-btn" id="cfMergeReset">${T('app.cf_merger_reset')}</button>` : ''}</span>
       </div>
-      <button class="btn btn-sm ${needMerge ? 'btn-primary' : ''}" id="cfMergeOpen">打开 Script Merger</button>
+      <button class="btn btn-sm ${needMerge ? 'btn-primary' : ''}" id="cfMergeOpen">${T('app.open_merger')}</button>
     </div>`);
 
-  openModal('冲突检查', `
+  openModal(T('ui.nav_conflicts'), `
     <div class="cf-stats">
-      ${stat('脚本文件', st.script_files || 0)}
-      ${stat('界面撞车', st.bundle_ui || 0, st.bundle_ui ? 'is-warn' : '')}
-      ${stat('已合并', st.merged_groups || 0, st.merged_groups ? 'is-ok' : '')}
-      ${stat('待合并', st.merge || 0, st.merge ? 'is-merge' : '')}
-      ${stat('需要注意', st.warn || 0, st.warn ? 'is-warn' : '')}
+      ${stat(T('app.cf_stat_scripts'), st.script_files || 0)}
+      ${stat(T('app.cf_stat_bundle'), st.bundle_ui || 0, st.bundle_ui ? 'is-warn' : '')}
+      ${stat(T('app.merged'), st.merged_groups || 0, st.merged_groups ? 'is-ok' : '')}
+      ${stat(T('app.cf_stat_pending'), st.merge || 0, st.merge ? 'is-merge' : '')}
+      ${stat(T('app.cf_stat_warn'), st.warn || 0, st.warn ? 'is-warn' : '')}
     </div>
     ${mergeBar}
     <div class="cf-list">${rows}</div>
     <div class="set-actions" style="margin-top:12px">
-      <button class="btn btn-sm" id="cfRecheck">重新检查</button>
+      <button class="btn btn-sm" id="cfRecheck">${T('app.cf_recheck')}</button>
       <span class="pv-foot" style="align-self:center">
-        ${rep.checked_at ? '检查于 ' + esc(rep.checked_at.replace('T', ' ').slice(5, 16)) : ''}</span>
+        ${rep.checked_at ? T('app.cf_checked_at', { time: esc(rep.checked_at.replace('T', ' ').slice(5, 16)) }) : ''}</span>
     </div>`, { wide: true });
 
   $('#cfRecheck').onclick = () => openConflictsDialog(true);
@@ -1336,7 +1352,7 @@ async function openConflictsDialog(force = false, quiet = false) {
     loc.onclick = async () => {
       const old = loc.textContent;
       loc.disabled = true;
-      loc.textContent = '选择中…';
+      loc.textContent = T('app.choosing');
       try {
         const r = await api('/api/merger/locate', {});
         if (r.cancelled) {
@@ -1345,7 +1361,7 @@ async function openConflictsDialog(force = false, quiet = false) {
           return;
         }
         if (r.suspicious) {
-          toast('这个文件名看着不像 Script Merger，装错了的话点「重新指定位置」再选一次', 7000);
+          toast(T('app.merger_suspicious'), 7000);
         }
         openConflictsDialog(true);          // 带着新路径重新检查
       } catch (e) {
@@ -1378,7 +1394,7 @@ async function openConflictsDialog(force = false, quiet = false) {
       btn.disabled = true;
       try {
         await api('/api/merger/open', {});
-        toast('Script Merger 已启动。合完切回来就行，这里会自动重新检查。', 5200);
+        toast(T('app.merger_started_hint'), 5200);
       } catch (err) {
         toast(err.message, 6000);
       } finally {
@@ -1416,14 +1432,14 @@ document.addEventListener('dragstart', e => {
   // 别让它看起来像拖了没反应。
   if (S.view === 'list' && !canReorder()) {
     e.preventDefault();
-    toast('当前不是「全部模组 + 按加载顺序」，拖不动。要调顺序点左侧「加载顺序」。', 4200);
+    toast(T('app.drag_need_order'), 4200);
     return;
   }
   // 已禁用的模组不占加载顺序（它压根不加载），列表里也是钉在最后的，
   // 所以不给拖。但要说清楚，不然看起来像拖坏了。
   if (S.view === 'list' && card.classList.contains('is-off')) {
     e.preventDefault();
-    toast('已禁用的模组不占加载顺序，启用之后才需要排位置', 3600);
+    toast(T('app.drag_disabled'), 3600);
     return;
   }
   dragKey = card.dataset.key;
@@ -1482,7 +1498,7 @@ document.addEventListener('drop', async e => {
   // 拖到某个已禁用的卡片上，等于把这张放到已启用那一段的最后。
   const liveKeys = order.filter(k => byKey.get(k)?.enabled);
   if (!liveKeys.includes(moved)) {
-    toast('已禁用的模组不占加载顺序，启用之后才需要排位置', 3600);
+    toast(T('app.drag_disabled'), 3600);
     return;
   }
   const prios = reorderSlots(liveKeys, byKey);
@@ -1491,9 +1507,9 @@ document.addEventListener('drop', async e => {
 
   try {
     await api('/api/reorder', { keys: liveKeys, prios });
-    toast('加载顺序已保存', 3200, { label: '撤销', fn: undoNow });
+    toast(T('app.reorder_saved'), 3200, { label: T('app.undo'), fn: undoNow });
     refreshJournal();
-  } catch (err) { toast('排序失败：' + err.message, 4000); load(); }
+  } catch (err) { toast(T('app.reorder_failed', { msg: err.message }), 4000); load(); }
 });
 
 /* 重排时发什么号：只发这批模组**原来就占着的**那些号，从小到大按新顺序配上。
@@ -1520,8 +1536,8 @@ async function openLogDialog() {
   await refreshJournal();
   const html = JOURNAL.length
     ? JOURNAL.map(i => `<div class="log-row"><time>${esc(i.time)}</time><span>${esc(i.label)}</span></div>`).join('')
-    : `<div class="muted">还没有操作记录。启用、禁用、调顺序都会记在这里，可以随时撤销。</div>`;
-  openModal('操作日志', html);
+    : `<div class="muted">${T('app.log_empty')}</div>`;
+  openModal(T('ui.log'), html);
 }
 
 $('#btnLog').addEventListener('click', () => { openLogDialog(); });
@@ -1541,15 +1557,15 @@ async function toggleMod(key) {
   try {
     await api('/api/mods/toggle', { key, enabled: m.enabled });
     // 提示条里直接带撤销：让「这一步能退」在发生的那一刻被看见
-    toast(`${m.name} 已${m.enabled ? '启用' : '禁用'}`, 3200,
-      { label: '撤销', fn: undoNow });
+    toast(m.enabled ? T('app.mod_enabled', { name: m.name }) : T('app.mod_disabled', { name: m.name }), 3200,
+      { label: T('app.undo'), fn: undoNow });
     renderSidebar();
     renderStatus();
   } catch (err) {
     m.enabled = !m.enabled;
     renderList();
     if (S.selected === key) renderDetails(m);
-    toast('切换失败：' + err.message, 4000);
+    toast(T('app.toggle_failed', { msg: err.message }), 4000);
   }
 }
 
@@ -1561,7 +1577,7 @@ $('#sortBy').addEventListener('change', e => {
   // 只有「列表视图 + 全部模组 + 按加载顺序」时才拖得动。以前另外两种情况
   // 是静默拒绝，用户拖半天以为软件坏了。
   if (S.sort !== 'priority' && S.view === 'list') {
-    toast('现在按别的规则排显示顺序，拖不动。要改游戏加载顺序，点左侧「加载顺序」。', 4200);
+    toast(T('app.sort_no_drag'), 4200);
   }
 });
 
@@ -1570,8 +1586,8 @@ $('#emptyPickGame').addEventListener('click', async () => {
   const picked = await api('/api/pick-file', { kind: 'dir' }).catch(e => ({ error: e.message }));
   // 原生选目录框可能被系统策略挡住，退回手输（站内输入框，不用 prompt()）
   const p = picked.path || await askText({
-    title: '游戏目录在哪',
-    label: '选到有 bin 文件夹的那一层，不是 bin 里面',
+    title: T('app.pick_game_title'),
+    label: T('app.pick_game_label'),
     value: S.data?.config?.game_root || '',
     placeholder: 'D:\\game\\steam\\steamapps\\common\\The Witcher 3',
   });
@@ -1579,15 +1595,15 @@ $('#emptyPickGame').addEventListener('click', async () => {
   try {
     await api('/api/settings', { action: 'set_game_root', path: p });
     await load();
-    toast('游戏目录已设置');
-  } catch (e) { toast('设置失败：' + e.message, 4000); }
+    toast(T('app.game_root_set'));
+  } catch (e) { toast(T('app.set_failed', { msg: e.message }), 4000); }
 });
 $('#emptyRedetect').addEventListener('click', async () => {
   try {
     const r = await api('/api/config', { redetect: true });
     await load();
-    toast(r.game_root ? `找到了：${r.game_root}` : '还是没找到，手动选一下目录吧', 5000);
-  } catch (e) { toast('查找失败：' + e.message, 4000); }
+    toast(r.game_root ? T('app.redetect_found', { path: r.game_root }) : T('app.redetect_none'), 5000);
+  } catch (e) { toast(T('app.redetect_failed', { msg: e.message }), 4000); }
 });
 $('#emptyClear').addEventListener('click', () => {
   S.q = ''; $('#q').value = ''; renderList(); $('#q').focus();
@@ -1617,7 +1633,7 @@ $('#btnTheme').addEventListener('click', () => {
   S.theme = THEME_ORDER[(i < 0 ? 0 : i + 1) % THEME_ORDER.length];
   localStorage.setItem('waass.theme', S.theme);
   applyTheme();
-  toast(`外观：${THEME_LABEL[S.theme]}`, 1800);
+  toast(T('app.theme_now', { name: T(THEME_KEY[S.theme] || S.theme) }), 1800);
 });
 
 // 系统在设置里换明暗时，界面跟着变（只在「跟随系统」时生效）
@@ -1629,15 +1645,15 @@ $('#btnPickGame').addEventListener('click', () => {
   if (typeof openSettingsDialog === 'function') openSettingsDialog();
   else {
     askText({
-      title: '设置游戏目录',
-      label: '粘贴游戏根目录（含 bin 文件夹的那个）',
+      title: T('app.set_game_dir_title'),
+      label: T('app.set_game_dir_label'),
       value: S.data?.config?.game_root || '',
       placeholder: 'D:\\game\\steam\\steamapps\\common\\The Witcher 3',
     }).then(p => {
       if (!p) return;
       api('/api/settings', { action: 'set_game_root', path: p })
-        .then(() => load()).then(() => toast('游戏目录已更新'))
-        .catch(e => toast('设置失败：' + e.message, 4000));
+        .then(() => load()).then(() => toast(T('app.game_root_updated')))
+        .catch(e => toast(T('app.set_failed', { msg: e.message }), 4000));
     });
   }
 });
@@ -1669,18 +1685,18 @@ document.addEventListener('change', async e => {
     if (gid) {
       await api('/api/library', { action: 'set_member', id: gid, key, on: true });
       const g = (S.data?.library?.groups || []).find(x => x.id === gid);
-      toast(`已归入「${g ? g.name : '分组'}」`);
+      toast(T('app.group_moved_to', { name: g ? g.name : T('app.group_fallback') }));
     } else {
       // 找到它当前所在的分组再移出
       const cur = S.data?.library?.by_key?.[key]?.group;
       if (cur) await api('/api/library', { action: 'set_member', id: cur.id, key, on: false });
-      toast('已移出分组');
+      toast(T('app.group_removed'));
     }
     S.data.library = await api('/api/library');
     renderSidebar();
     const m = S.mods.find(x => x.key === key);
     if (m) renderDetails(m);
-  } catch (err) { toast('操作失败：' + err.message, 4000); }
+  } catch (err) { toast(T('app.op_failed', { msg: err.message }), 4000); }
 });
 
 /* ---------- 启动 ---------- */

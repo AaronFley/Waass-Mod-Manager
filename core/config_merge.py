@@ -38,6 +38,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from core import i18n
+
 # 只处理这些：配置语义、按行可合并
 INI_SUFFIXES = {".ini", ".cfg"}
 
@@ -186,8 +188,7 @@ def diff(current_text: str, patch_text: str) -> list[Change]:
             if old_ln is not None and _norm(old_ln.value) != _norm(ln.value):
                 changes.append(Change(
                     "skip", section, key, ln.value, old_ln.value, ln.raw.strip(),
-                    f"这是游戏自己管理的字段，包里写的是 {ln.value}，"
-                    f"你游戏里是 {old_ln.value}，已跳过（改错会让游戏重置设置）"))
+                    i18n.t("cm.skip_protected", pv=ln.value, cv=old_ln.value)))
             continue
         if old_ln is None:
             changes.append(Change("add", section, key, ln.value, "",
@@ -351,7 +352,7 @@ def revert(current_text: str, changes: list[Change], *,
         if _norm(ln.value) != _norm(c.value) and not force:
             conflicts.append({"section": c.section, "key": c.key,
                               "expected": c.value, "found": ln.value,
-                              "why": "当前值已被改动过，没有硬还原"})
+                              "why": i18n.t("cm.conflict")})
             out.append(ln)
             continue
         if c.op == "add":
@@ -395,9 +396,10 @@ def summarize(changes: list[Change]) -> dict:
 
 
 def _text(add: list[Change], mod: list[Change]) -> str:
-    bits = []
+    if add and mod:
+        return i18n.t("cm.summary_both", n=len(add), m=len(mod))
     if add:
-        bits.append(f"新增 {len(add)} 项")
+        return i18n.t("cm.summary_add", n=len(add))
     if mod:
-        bits.append(f"修改 {len(mod)} 项")
-    return "、".join(bits) if bits else "无改动"
+        return i18n.t("cm.summary_mod", n=len(mod))
+    return i18n.t("cm.summary_none")

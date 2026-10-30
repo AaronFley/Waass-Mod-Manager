@@ -11,29 +11,29 @@ async function apiRaw(path, body) {
 }
 
 const KIND_LABEL = {
-  mod_folder: '模组',
-  dlc_folder: 'DLC',
-  menu_xml: '菜单',
-  bin_config: '游戏配置',
-  bin_binary: '游戏程序',
+  mod_folder: 'install.kind_mod',
+  dlc_folder: 'install.kind_dlc',
+  menu_xml: 'install.kind_menu',
+  bin_config: 'install.kind_game_config',
+  bin_binary: 'install.kind_game_binary',
 };
 
 /* ---------- 安装弹窗 ---------- */
 let ARC_DIR = '';          // '' = 看所有目录
 
 async function openInstallDialog() {
-  openModal('导入压缩包', `
+  openModal(T('ui.import'), `
     <div class="inst">
-      <div class="inst-label">压缩包路径</div>
+      <div class="inst-label">${T('install.archive_path')}</div>
       <div class="inst-inputrow">
         <input id="instPath" class="inst-input" spellcheck="false"
-               placeholder="粘贴 zip / 7z / rar 的完整路径">
-        <button class="btn" id="instBrowse">浏览…</button>
+               placeholder="${T('install.path_ph')}">
+        <button class="btn" id="instBrowse">${T('install.browse')}</button>
       </div>
-      <div class="inst-hint">浏览器读不到拖进来的文件路径，所以请用「浏览」或直接粘贴。</div>
-      <div class="inst-label" style="margin-top:18px">下载目录里的包</div>
+      <div class="inst-hint">${T('install.path_hint')}</div>
+      <div class="inst-label" style="margin-top:18px">${T('install.download_dir_packs')}</div>
       <div class="dir-chips" id="instDirs"></div>
-      <div class="inst-recent" id="instRecent">正在找…</div>
+      <div class="inst-recent" id="instRecent">${T('install.searching')}</div>
       <div class="inst-preview" id="instPreview" hidden></div>
     </div>`, { wide: true });
 
@@ -43,7 +43,7 @@ async function openInstallDialog() {
       $('#instPath').value = r.data.path;
       doPreview(r.data.path);
     } else if (!r.ok) {
-      toast(r.data.error || '打不开选择框', 3500);
+      toast(r.data.error || T('install.pick_failed'), 3500);
     }
   };
 
@@ -65,7 +65,7 @@ async function loadRecentArchives() {
   // 目录筛选：只有两个以上目录时才值得显示
   if (chips) {
     if (dirs.length > 1) {
-      chips.innerHTML = [`<button class="chip ${ARC_DIR ? '' : 'is-on'}" data-dir="">全部</button>`]
+      chips.innerHTML = [`<button class="chip ${ARC_DIR ? '' : 'is-on'}" data-dir="">${T('install.all_dirs')}</button>`]
         .concat(dirs.map(d => `<button class="chip ${ARC_DIR === d.path ? 'is-on' : ''}"
           data-dir="${esc(d.path)}" title="${esc(d.path)}">${esc(d.name)}</button>`))
         .join('');
@@ -78,8 +78,7 @@ async function loadRecentArchives() {
 
   if (!items.length) {
     box.innerHTML = `<div class="inst-hint" style="padding:10px 11px">
-      这个目录里没有 zip / 7z / rar。<br>
-      如果 mod 存在别的地方，去「设置」里加一个下载目录，或者用上面的「浏览」选。</div>`;
+      ${T('install.no_archives')}</div>`;
     return;
   }
 
@@ -90,8 +89,8 @@ async function loadRecentArchives() {
       <span class="arc-id">${it.nexus_id ? '#' + it.nexus_id : ''}</span>
       <span class="arc-size">${fmtSize(it.size)}</span>
       ${it.known
-        ? '<span class="arc-flag">已装过</span>'
-        : '<span class="arc-flag is-new">新</span>'}
+        ? `<span class="arc-flag">${T('install.installed_before')}</span>`
+        : `<span class="arc-flag is-new">${T('install.new_flag')}</span>`}
     </button>`).join('');
 
   box.querySelectorAll('.arc-row').forEach(b => {
@@ -109,10 +108,10 @@ let PREVIEW = null;
 async function doPreview(path) {
   const box = $('#instPreview');
   box.hidden = false;
-  box.innerHTML = `<div class="inst-hint">正在解包检查…</div>`;
+  box.innerHTML = `<div class="inst-hint">${T('install.scanning')}</div>`;
   const r = await apiRaw('/api/preview', { archive: path });
   if (!r.ok) {
-    box.innerHTML = `<div class="pv-error">${esc(r.data.error || '读不了这个包')}</div>`;
+    box.innerHTML = `<div class="pv-error">${esc(r.data.error || T('install.read_failed'))}</div>`;
     return;
   }
   PREVIEW = r.data;
@@ -122,18 +121,18 @@ async function doPreview(path) {
   const shown = top.slice(0, 12);
   const rows = shown.map(e => `
     <div class="pv-row">
-      <span class="pv-kind k-${e.kind}">${KIND_LABEL[e.kind] || '其他'}</span>
+      <span class="pv-kind k-${e.kind}">${KIND_LABEL[e.kind] ? T(KIND_LABEL[e.kind]) : T('install.kind_other')}</span>
       <span class="pv-dst">${esc(e.dst)}</span>
-      ${e.conflict ? '<span class="pv-flag">已存在</span>' : ''}
+      ${e.conflict ? `<span class="pv-flag">${T('install.file_exists')}</span>` : ''}
     </div>`).join('');
   const more = top.length > shown.length
-    ? `<div class="pv-more">还有 ${top.length - shown.length} 项…</div>` : '';
+    ? `<div class="pv-more">${T('install.more_items', { n: top.length - shown.length })}</div>` : '';
 
   const riskHtml = pv.risk === 'high' ? `
     <div class="pv-risk">
-      <b>这个包会写进游戏程序目录</b>
+      <b>${T('install.risk_bin_title')}</b>
       <div>${pv.bin_binaries.map(x => esc(x)).join('<br>')}</div>
-      <div class="pv-risk-sub">装错会导致游戏起不来。确认它对应你的游戏版本再继续。</div>
+      <div class="pv-risk-sub">${T('install.risk_bin_sub')}</div>
     </div>` : '';
 
   /* bin/config 下的配置文件（典型：SmartAutoLoot 的 autoloot.ini）。
@@ -147,13 +146,15 @@ async function doPreview(path) {
     if (!ms.length) return '';
     const lines = ms.map(m => {
       const bits = [];
-      if (m.added?.length) bits.push(`新增 ${m.added.map(esc).join('、')}`);
-      if (m.modified?.length) bits.push(`修改 ${m.modified.map(esc).join('、')}`);
+      if (m.added?.length) bits.push(T('install.merge_added',
+        { items: m.added.map(esc).join(T('install.list_sep')) }));
+      if (m.modified?.length) bits.push(T('install.merge_modified',
+        { items: m.modified.map(esc).join(T('install.list_sep')) }));
       const skipped = (m.skipped || []).map(s =>
-        `<span class="pv-skip">跳过 ${esc(s.key)}：${esc(s.why)}</span>`);
+        `<span class="pv-skip">${T('install.merge_skipped', { key: esc(s.key), why: esc(s.why) })}</span>`);
       return `<div class="pv-merge-row">
         <div class="pv-merge-file">${esc(m.dst)}</div>
-        <div class="pv-merge-what">${bits.length ? bits.join('；') : '无需改动'}</div>
+        <div class="pv-merge-what">${bits.length ? bits.join(T('install.clause_sep')) : T('install.merge_none')}</div>
         ${skipped.join('')}
       </div>`;
     }).join('');
@@ -161,32 +162,37 @@ async function doPreview(path) {
   })();
   const cfgHtml = cfgs.length ? `
     <div class="pv-cfg">
-      <b>会改游戏自带的配置文件（按行合并，不整份替换）</b>
+      <b>${T('install.cfg_title')}</b>
       <div>${cfgs.map(x => esc(x)).join('<br>')}</div>
       ${mergeDetail}
-      <div class="pv-cfg-sub">只把 mod 写的那几行并进去：你的画质设置、按键绑定、注释都保留原样。
-        卸载时只撤掉这几行，不会删掉整个文件。</div>
+      <div class="pv-cfg-sub">${T('install.cfg_sub')}</div>
     </div>` : '';
 
   // 高危那段已经单独说了，这里不再重复
-  const warns = (pv.warnings || []).filter(w => !w.includes('游戏程序目录'));
+  // 警告有两种形态：纯字符串，或 {code, message} 对象。code 是给程序看的
+  // 稳定标识（比如 inside_game_bin = 要往游戏 bin 目录写文件，高危区已单独
+  // 提示过，这里不再重复），message 才是给人看的 —— 后端已按界面语言译好。
+  // 以前按中文文本过滤，英文界面一开就会重复显示，改成按 code 判。
+  const warns = (pv.warnings || []).filter(w =>
+    !(w && typeof w === 'object' && w.code === 'inside_game_bin'));
+  const warnText = w => (w && typeof w === 'object') ? String(w.message || '') : String(w);
   const warnHtml = warns.length
-    ? `<div class="pv-warn">${warns.map(w => esc(w)).join('<br>')}</div>` : '';
+    ? `<div class="pv-warn">${warns.map(w => esc(warnText(w))).join('<br>')}</div>` : '';
 
   // 覆盖清单不能只报个数。「装之前能看见将失去什么」是这一步的全部意义，
   // 所以给可展开的完整清单，而不是一句「其中 N 项已经有了」。
   const conflictNote = pv.conflicts.length ? `
     <details class="pv-note pv-conflicts">
-      <summary>其中 ${pv.conflicts.length} 项游戏里已经有了，继续装会覆盖掉 —— 点开看是哪些</summary>
+      <summary>${T('install.conflicts_summary', { n: pv.conflicts.length })}</summary>
       <div class="pv-cf-list">
         ${pv.conflicts.slice(0, 60).map(c => `<div class="pv-cf-row">
-          <span class="pv-kind k-${esc(c.kind || '')}">${KIND_LABEL[c.kind] || '其他'}</span>
+          <span class="pv-kind k-${esc(c.kind || '')}">${KIND_LABEL[c.kind] ? T(KIND_LABEL[c.kind]) : T('install.kind_other')}</span>
           <code>${esc(c.dst)}</code>
         </div>`).join('')}
         ${pv.conflicts.length > 60
-          ? `<div class="pv-more">还有 ${pv.conflicts.length - 60} 项…</div>` : ''}
+          ? `<div class="pv-more">${T('install.more_items', { n: pv.conflicts.length - 60 })}</div>` : ''}
       </div>
-      <div class="pv-cf-foot">旧的那份会移到隔离区，可以还原，不会被删除。</div>
+      <div class="pv-cf-foot">${T('install.conflict_foot')}</div>
     </details>`
     : '';
 
@@ -195,12 +201,12 @@ async function doPreview(path) {
   const metaLine = (() => {
     const bits = [];
     if (pv.nexus_id) bits.push('Nexus #' + esc(pv.nexus_id));
-    if (pv.meta?.author) bits.push('作者 ' + esc(pv.meta.author));
-    if (pv.meta?.version) bits.push('Nexus 上是 v' + esc(pv.meta.version));
+    if (pv.meta?.author) bits.push(T('install.meta_author', { name: esc(pv.meta.author) }));
+    if (pv.meta?.version) bits.push(T('install.meta_version', { version: esc(pv.meta.version) }));
     return bits.length ? bits.join(' · ') + ' · ' : '';
   })();
   const officialName = (pv.meta?.name && pv.meta.name !== pv.name)
-    ? `<div class="pv-official">Nexus 上的完整标题：${esc(pv.meta.name)}</div>` : '';
+    ? `<div class="pv-official">${T('install.official_title', { name: esc(pv.meta.name) })}</div>` : '';
 
   box.innerHTML = `
     <div class="pv-head">
@@ -215,8 +221,9 @@ async function doPreview(path) {
     ${warnHtml}
     <div class="pv-list">${rows}${more}</div>
     <div class="pv-actions">
-      <button class="btn btn-primary" id="instGo">${pv.conflicts.length ? '覆盖安装' : '安装'}</button>
-      <span class="pv-foot">装完可随时卸载，文件进隔离区不删除</span>
+      <button class="btn btn-primary" id="instGo">${pv.conflicts.length
+        ? T('install.overwrite_install') : T('install.install_btn')}</button>
+      <span class="pv-foot">${T('install.foot_hint')}</span>
     </div>`;
 
   $('#instGo').onclick = doInstall;
@@ -226,7 +233,7 @@ async function doInstall() {
   if (!PREVIEW) return;
   const btn = $('#instGo');
   btn.disabled = true;
-  btn.textContent = '安装中…';
+  btn.textContent = T('install.installing');
 
   const body = {
     archive: PREVIEW.archive,
@@ -237,18 +244,25 @@ async function doInstall() {
   btn.disabled = false;
 
   if (!r.ok) {
-    btn.textContent = '重试';
-    toast(r.data.error || '安装失败', 5000);
+    btn.textContent = T('common.retry');
+    toast(r.data.error || T('install.install_failed'), 5000);
     return;
   }
 
   closeModal(true);
   const meta = r.data.meta || {};
-  const got = meta.author || meta.version
-    ? `（Nexus 上是 ${meta.author ? meta.author + ' 的' : ''}${
-        meta.version ? ' v' + meta.version : ''}）` : '';
-  toast(`${r.data.name} 装好了${r.data.mods.length ? '：' + r.data.mods.join('、') : ''}${got}`,
-    meta.version ? 4200 : 3200);
+  const got = meta.author && meta.version
+    ? T('install.nexus_meta_both', { author: meta.author, version: meta.version })
+    : meta.author
+      ? T('install.nexus_meta_author', { author: meta.author })
+      : meta.version
+        ? T('install.nexus_meta_version', { version: meta.version })
+        : '';
+  toast(T(r.data.mods.length ? 'install.done_with_mods' : 'install.done_plain', {
+    name: r.data.name,
+    mods: r.data.mods.join(T('install.list_sep')),
+    meta: got,
+  }), meta.version ? 4200 : 3200);
   await load();
 }
 
@@ -259,8 +273,8 @@ async function openPackagesDialog(focusId = '') {
 
   const what = p => {
     const parts = [...(p.mods || []), ...(p.dlc || [])];
-    if (parts.length) return parts.join('、');
-    return `${p.file_count || 0} 个文件`;
+    if (parts.length) return parts.join(T('install.list_sep'));
+    return TN('install.file_count_one', 'install.file_count_many', p.file_count || 0);
   };
 
   const row = (p, mode) => `
@@ -268,14 +282,14 @@ async function openPackagesDialog(focusId = '') {
       <div class="pkg-main">
         <div class="pkg-name">${esc(p.name)}
           <span class="pkg-ver">${esc(p.version || '')}</span>
-          ${p.risk === 'high' ? '<span class="pkg-risk">写程序目录</span>' : ''}
+          ${p.risk === 'high' ? `<span class="pkg-risk">${T('install.writes_bin')}</span>` : ''}
         </div>
         <div class="pkg-sub">
           ${p.nexus_id ? 'Nexus #' + p.nexus_id + ' · ' : ''}${esc(what(p))}
         </div>
       </div>
       <button class="btn btn-sm" data-pkg="${esc(p.id)}" data-mode="${mode}">
-        ${mode === 'active' ? '卸载' : '恢复'}</button>
+        ${mode === 'active' ? T('install.uninstall') : T('install.restore')}</button>
     </div>`;
 
   const block = (title, items, mode, hint) => items.length ? `
@@ -288,26 +302,25 @@ async function openPackagesDialog(focusId = '') {
   const unknown = (S.data?.unknown_mods || []);
   const unknownBlock = unknown.length ? `
     <div class="pkg-group">
-      <div class="pkg-group-title">档案外的手动模组<em>${unknown.length}</em></div>
-      <div class="pkg-hint">这些是 mods 目录里存在、但没有安装记录的。管理器不会替你动它们。</div>
+      <div class="pkg-group-title">${T('install.unknown_mods_title')}<em>${unknown.length}</em></div>
+      <div class="pkg-hint">${T('install.unknown_mods_hint')}</div>
       ${unknown.map(n => `<div class="pkg-row"><div class="pkg-main">
         <div class="pkg-name">${esc(n)}</div></div></div>`).join('')}
     </div>` : '';
 
   const focused = g.active.find(p => p.id === focusId);
 
-  openModal('已安装的包', `
+  openModal(T('install.packages_title'), `
     <div class="pkg">
       ${focused ? `<div class="pkg-focus-hint">
-        你要找的模组在这个包里。这个包一共带了 ${(focused.mods || []).length} 个模组，
-        卸载会把它们一起移走（进隔离区，可恢复）。
+        ${T('install.focus_hint', { n: (focused.mods || []).length })}
       </div>` : ''}
-      ${block('已安装', g.active, 'active', '')}
-      ${block('已卸载（在隔离区，可一键恢复）', g.removed, 'removed',
-              '文件没被删除，恢复等于重装，不用重新下载。')}
+      ${block(T('install.group_installed'), g.active, 'active', '')}
+      ${block(T('install.group_removed'), g.removed, 'removed',
+              T('install.removed_hint'))}
       ${unknownBlock}
       ${!g.active.length && !g.removed.length && !unknown.length
-        ? '<div class="inst-hint">还没有通过 Waass 装过东西。</div>' : ''}
+        ? `<div class="inst-hint">${T('install.empty_packages')}</div>` : ''}
     </div>`, { wide: true });
 
   if (focusId) {
@@ -319,13 +332,13 @@ async function openPackagesDialog(focusId = '') {
     b.onclick = async () => {
       const mode = b.dataset.mode;
       b.disabled = true;
-      b.textContent = mode === 'active' ? '卸载中…' : '恢复中…';
+      b.textContent = mode === 'active' ? T('install.uninstalling') : T('install.restoring');
       const res = await apiRaw(mode === 'active' ? '/api/uninstall' : '/api/restore',
                                { package_id: b.dataset.pkg });
       if (!res.ok) {
-        toast(res.data.error || '操作失败', 5000);
+        toast(res.data.error || T('install.action_failed'), 5000);
         b.disabled = false;
-        b.textContent = mode === 'active' ? '卸载' : '恢复';
+        b.textContent = mode === 'active' ? T('install.uninstall') : T('install.restore');
         return;
       }
       if (mode === 'active') {
@@ -338,14 +351,14 @@ async function openPackagesDialog(focusId = '') {
           return;
         }
         if (d.reverted?.length) {
-          toast('已卸载：mod 文件移进隔离区，游戏配置里只撤掉了它自己加的那几行');
+          toast(T('install.uninstalled_reverted'));
         } else if (d.moved?.length) {
-          toast('已移到隔离区，可随时恢复');
+          toast(T('install.moved_to_quarantine'));
         } else {
-          toast('已卸载');
+          toast(T('install.uninstalled'));
         }
       } else {
-        toast('已恢复');
+        toast(T('install.restored'));
       }
       await load();
       openPackagesDialog();
@@ -367,51 +380,46 @@ function showUninstallConflicts(d) {
         <code>${esc(c.key || '')}</code>
       </div>
       <div class="uc-vals">
-        <span>当初写进去 <code>${esc(c.expected ?? '')}</code></span>
-        <span>现在文件里 <code>${esc(c.found ?? '')}</code></span>
+        <span>${T('install.uc_expected', { value: `<code>${esc(c.expected ?? '')}</code>` })}</span>
+        <span>${T('install.uc_found', { value: `<code>${esc(c.found ?? '')}</code>` })}</span>
       </div>
       ${c.why ? `<div class="uc-why">${esc(c.why)}</div>` : ''}
     </div>`).join('');
 
-  openModal('卸载完成，但有配置没有还原', `
+  openModal(T('install.uc_title'), `
     <div class="uc">
-      <div class="uc-lead">
-        <b>${esc(d.name || '这个包')}</b> 已经卸载，文件进了隔离区。
-        下面这 <b>${list.length}</b> 处游戏配置<u>没有</u>硬还原 ——
-        因为装上它之后这些值又被改过（可能是游戏自己写的，也可能是别的 mod 或你自己改的），
-        强行还原会把那些改动一起吃掉，所以留着没动。
-      </div>
+      <div class="uc-lead">${T('install.uc_lead', {
+        name: esc(d.name || T('install.this_package')),
+        n: list.length,
+      })}</div>
       <div class="uc-list">${rows}</div>
-      <div class="uc-hint">
-        现在这些值还停在「装着这个 mod 时」的状态。进游戏发现按键或设置不对，
-        要么打开配置目录自己改回来，要么直接把这次卸载撤销掉、让东西原样装回来。
-      </div>
+      <div class="uc-hint">${T('install.uc_hint')}</div>
       <div class="set-actions" style="margin-top:12px;flex-wrap:wrap">
-        <button class="btn btn-sm btn-primary" id="ucUndo">撤销这次卸载</button>
-        <button class="btn btn-sm" id="ucOpen">打开配置目录</button>
-        <button class="btn btn-sm btn-ghost" id="ucOk">就这样，我知道了</button>
+        <button class="btn btn-sm btn-primary" id="ucUndo">${T('install.uc_undo')}</button>
+        <button class="btn btn-sm" id="ucOpen">${T('install.uc_open')}</button>
+        <button class="btn btn-sm btn-ghost" id="ucOk">${T('install.uc_ok')}</button>
       </div>
     </div>`, { wide: list.length > 2 });
 
   $('#ucOk').onclick = () => { closeModal(true); openPackagesDialog(); };
   $('#ucOpen').onclick = async () => {
     try { await api('/api/open-folder', { key: '@userconfig' }); }
-    catch (e) { toast('打不开：' + e.message, 3500); }
+    catch (e) { toast(T('install.open_failed', { msg: e.message }), 3500); }
   };
   $('#ucUndo').onclick = async () => {
     const b = $('#ucUndo');
     b.disabled = true;
-    b.textContent = '正在撤销…';
+    b.textContent = T('install.undoing');
     try {
       await api('/api/undo', {});
       closeModal(true);
-      toast('已撤销，东西装回来了');
+      toast(T('install.undo_done'));
       await load();
       openPackagesDialog();
     } catch (e) {
-      toast('撤销失败：' + e.message, 4000);
+      toast(T('install.undo_failed', { msg: e.message }), 4000);
       b.disabled = false;
-      b.textContent = '撤销这次卸载';
+      b.textContent = T('install.uc_undo');
     }
   };
 }
@@ -451,34 +459,38 @@ async function openSavesDialog() {
     <div class="pkg-row">
       <div class="pkg-main">
         <div class="pkg-name">${esc(it.time.replace('T', ' '))}
-          <span class="pkg-ver">${it.mode === 'full' ? '全量' : '增量'}</span></div>
-        <div class="pkg-sub">${it.count} 个文件 · ${fmtSize(it.bytes)}${it.note ? ' · ' + esc(it.note) : ''}</div>
+          <span class="pkg-ver">${it.mode === 'full'
+            ? T('install.save_mode_full') : T('install.save_mode_inc')}</span></div>
+        <div class="pkg-sub">${TN('install.save_row_one', 'install.save_row_many',
+          it.count, { size: fmtSize(it.bytes) })}${it.note ? ' · ' + esc(it.note) : ''}</div>
       </div>
-      <button class="btn btn-sm" data-save="${esc(it.id)}">恢复</button>
+      <button class="btn btn-sm" data-save="${esc(it.id)}">${T('install.restore')}</button>
     </div>`).join('');
 
-  openModal('存档备份', `
+  openModal(T('ui.nav_saves'), `
     <div class="pkg">
-      <div class="pkg-hint" style="margin-top:0">存档位置：${esc(dir)}</div>
+      <div class="pkg-hint" style="margin-top:0">${T('install.saves_dir', { path: esc(dir) })}</div>
       <div class="save-actions">
-        <button class="btn btn-primary" id="saveFull">备份全部存档</button>
-        <button class="btn" id="saveInc">只备份新增的</button>
+        <button class="btn btn-primary" id="saveFull">${T('install.backup_all')}</button>
+        <button class="btn" id="saveInc">${T('install.backup_new')}</button>
       </div>
       <div class="pkg-group">
-        <div class="pkg-group-title">已有备份<em>${items.length}</em></div>
-        ${rows || '<div class="inst-hint">还没有备份。装 mod 前建议先点一次「备份全部存档」。</div>'}
+        <div class="pkg-group-title">${T('install.group_backups')}<em>${items.length}</em></div>
+        ${rows || `<div class="inst-hint">${T('install.no_backups')}</div>`}
       </div>
     </div>`, { wide: true });
 
   const doBackup = async (mode, btn) => {
     btn.disabled = true;
     const old = btn.textContent;
-    btn.textContent = '备份中…';
+    btn.textContent = T('install.backing_up');
     const res = await apiRaw('/api/saves/backup', { mode });
     btn.disabled = false;
     btn.textContent = old;
-    if (!res.ok) return toast(res.data.error || '备份失败', 4000);
-    toast(res.data.empty ? '自上次备份以来没有新存档' : `已备份 ${res.data.count} 个文件`);
+    if (!res.ok) return toast(res.data.error || T('install.backup_failed'), 4000);
+    toast(res.data.empty
+      ? T('install.backup_empty')
+      : TN('install.backup_done_one', 'install.backup_done_many', res.data.count));
     openSavesDialog();
   };
   $('#saveFull').onclick = e => doBackup('full', e.target);
@@ -487,15 +499,15 @@ async function openSavesDialog() {
   $$('#modalBody [data-save]').forEach(b => {
     b.onclick = async () => {
       b.disabled = true;
-      b.textContent = '恢复中…';
+      b.textContent = T('install.restoring');
       const res = await apiRaw('/api/saves/restore', { id: b.dataset.save });
       if (!res.ok) {
-        toast(res.data.error || '恢复失败', 4000);
+        toast(res.data.error || T('install.restore_failed'), 4000);
         b.disabled = false;
-        b.textContent = '恢复';
+        b.textContent = T('install.restore');
         return;
       }
-      toast(`已恢复 ${res.data.restored} 个存档文件`);
+      toast(TN('install.restore_done_one', 'install.restore_done_many', res.data.restored));
       openSavesDialog();
     };
   });

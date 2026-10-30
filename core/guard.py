@@ -16,6 +16,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from core import i18n
+
 ENV_TEST_MODE = "WAASS_TEST_MODE"
 ENV_SANDBOX = "WAASS_SANDBOX_DIR"
 ENV_READONLY = "WAASS_READONLY"
@@ -134,7 +136,7 @@ def assert_can_write(path: str | Path, what: str = "") -> None:
 
     if readonly():
         _denied_hits.append(str(p))
-        raise WriteDenied(f"程序处在只读模式{label}，不会写任何文件：{p}")
+        raise WriteDenied(i18n.t("safe.readonly_denied", label=label, path=p))
 
     if p in _allowed_files:
         return
@@ -150,10 +152,7 @@ def assert_can_write(path: str | Path, what: str = "") -> None:
             f"测试模式禁止写沙盒外的路径{label}：{p}"
             + (f"\n沙盒是：{sb}" if sb else "")
         )
-    raise WriteDenied(
-        f"这个路径没有写入授权{label}：{p}\n"
-        "如果这是你主动发起的安装/卸载，说明程序漏了授权步骤，请把这个提示发给我。"
-    )
+    raise WriteDenied(i18n.t("safe.write_denied", label=label, path=p))
 
 
 def assert_can_write_many(paths, what: str = "") -> None:

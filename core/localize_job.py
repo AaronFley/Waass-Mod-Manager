@@ -17,7 +17,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import guard, localize, localize_backup as LB, safety, translate
+from . import guard, i18n, localize, localize_backup as LB, safety, translate
 
 _LOCK = threading.Lock()
 _JOBS: dict[str, dict] = {}
@@ -45,12 +45,12 @@ def start(root: Path, keys: list[str], cats=None) -> dict:
     cats = tuple(cats or localize.CAT_DEFAULT)
     unknown = [c for c in cats if c not in localize.CAT_LABEL]
     if unknown:
-        raise ValueError("不认识的内容类别：%s" % "、".join(unknown))
+        raise ValueError(i18n.t("loc.bad_cat", names="、".join(unknown)))
 
     jobs = localize.build_jobs(root, list(keys), cats=cats)
     items = jobs["items"]
     if not items:
-        raise ValueError("选中的模组里没有可翻的菜单文字")
+        raise ValueError(i18n.t("loc.no_menu_text"))
 
     job = {
         "id": _new_id(),
@@ -103,7 +103,7 @@ def _push(job: dict, n: int, row: dict) -> None:
 def cancel(job_id: str) -> dict:
     job = _JOBS.get(job_id)
     if not job:
-        raise KeyError("任务不存在或已过期")
+        raise KeyError(i18n.t("loc.job_gone"))
     job["_stop"].set()
     return snapshot(job_id)
 
@@ -111,7 +111,7 @@ def cancel(job_id: str) -> dict:
 def snapshot(job_id: str, with_items: bool = True) -> dict:
     job = _JOBS.get(job_id)
     if not job:
-        raise KeyError("任务不存在或已过期")
+        raise KeyError(i18n.t("loc.job_gone"))
     with job["_lock"]:
         rows = list(job["items"])
         out = {
@@ -175,9 +175,9 @@ def write(job_id: str, edits: list[dict] | None = None,
     """
     job = _JOBS.get(job_id)
     if not job:
-        raise KeyError("任务不存在或已过期")
+        raise KeyError(i18n.t("loc.job_gone"))
     if job["status"] == "running":
-        raise ValueError("还在翻译，等它跑完再写入")
+        raise ValueError(i18n.t("loc.still_running"))
 
     with (job.get("_lock") or _LOCK):
         rows = job["items"]
@@ -207,7 +207,7 @@ def write(job_id: str, edits: list[dict] | None = None,
         todo.append(r)
 
     if not todo:
-        return {"ok": False, "error": "没有可写的译文（可能都放不下或还没翻）",
+        return {"ok": False, "error": i18n.t("loc.nothing_to_write"),
                 "changed": 0, "files": [], "skipped": []}
 
     if root is not None:
@@ -258,8 +258,10 @@ def write(job_id: str, edits: list[dict] | None = None,
     entry = None
     if written_paths:
         keep = [f for f in token["files"] if f["path"] in written_paths]
+        n_mods = len({r["mod"] for r in todo if str(r["file"]) in written_paths})
         entry = LB.commit({"files": keep, "ts": token["ts"]},
-                           label="汉化 %d 个模组" % len({r["mod"] for r in todo if str(r["file"]) in written_paths}),
+                           label=i18n.tn("loc.op_localize_one", "loc.op_localize_many",
+                                         n_mods, n=n_mods),
                            engine=job.get("engine", ""), count=changed, root=root)
 
     return {
@@ -269,7 +271,7 @@ def write(job_id: str, edits: list[dict] | None = None,
         "skipped": skipped[:30],
         "skipped_count": len(skipped),
         "record": entry["id"] if entry else "",
-        "error": "" if changed else "一条都没写进去，看下面的原因",
+        "error": "" if changed else i18n.t("loc.wrote_nothing"),
     }
 
 

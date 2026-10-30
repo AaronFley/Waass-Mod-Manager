@@ -12,7 +12,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from . import config_merge, config_patches, guard, merger, registry, safety
+from . import config_merge, config_patches, guard, i18n, merger, registry, safety
 from .archive import ArchiveError, build_plan, cleanup, extract
 from .paths import DATA_DIR, game_layout, load_config
 from .settings_ini import SettingsFile
@@ -217,7 +217,7 @@ def install(archive: str | Path, game_root: str | Path, *,
     """
     root = _game(game_root)
     if not root.is_dir():
-        raise InstallError(f"游戏目录不存在：{root}")
+        raise InstallError(i18n.t("ins.game_dir_missing", path=root))
 
     info = registry.parse_archive_name(str(archive))
     staging, _ = extract(archive)
@@ -225,13 +225,13 @@ def install(archive: str | Path, game_root: str | Path, *,
         plan = build_plan(staging, root)
         if not plan.ok:
             raise InstallError(
-                "这个包没认出 mod 结构，可能是手动安装型。\n"
-                + "\n".join(plan.warnings[:2])
+                i18n.t("ins.no_mod_structure",
+                       warn="\n".join(plan.warnings[:2]))
             )
 
         if plan.risk == "high" and not allow_risk:
             raise NeedsConfirm(
-                "这个包会写游戏程序目录（DLL/配置），装错会导致游戏起不来。",
+                i18n.t("ins.risk_bin"),
                 {"risk": plan.risk, "bin_binaries": plan.bin_binaries,
                  "bin_configs": plan.bin_configs,
                  "need": "allow_risk"},
@@ -240,8 +240,9 @@ def install(archive: str | Path, game_root: str | Path, *,
         conflicts = plan.conflicts
         if conflicts and on_conflict != "replace":
             raise NeedsConfirm(
-                f"游戏里已经有 {len(conflicts)} 个同名内容："
-                + "、".join((c.name or c.dst) for c in conflicts[:4]),
+                i18n.tn("ins.conflict_one", "ins.conflict_many", len(conflicts),
+                        n=len(conflicts),
+                        names="、".join((c.name or c.dst) for c in conflicts[:4])),
                 {"conflicts": [{"dst": c.dst, "name": c.name, "kind": c.kind}
                                for c in conflicts],
                  "need": "on_conflict=replace"},
@@ -265,13 +266,15 @@ def install(archive: str | Path, game_root: str | Path, *,
                 s = config_merge.summarize(m["changes"])
                 actions.append({
                     "dst": e.dst, "kind": e.kind,
-                    "action": "无需改动" if m["noop"] else f"合并写入（{s['text']}）",
+                    "action": i18n.t("ins.act_noop") if m["noop"]
+                    else i18n.t("ins.act_merge", text=s['text']),
                 })
                 continue
             actions.append({
                 "dst": e.dst,
                 "kind": e.kind,
-                "action": "替换（旧的先进隔离区）" if e.conflict else "新增",
+                "action": i18n.t("ins.act_replace") if e.conflict
+                else i18n.t("ins.act_add"),
             })
 
         merge_summary = [{"dst": rel,
@@ -299,7 +302,8 @@ def install(archive: str | Path, game_root: str | Path, *,
         guard.allow(DATA_DIR, QUARANTINE)
         safety.assert_writable(*[_abs(root, e.dst) for e in plan.entries])
 
-        op = safety.Operation(f"安装 {info['name']} {info['version']}".strip())
+        op = safety.Operation(
+            i18n.t("ins.op_install", name=info['name'], version=info['version']).strip())
         try:
             for e in plan.entries:
                 if e.kind == "settings":
@@ -398,9 +402,9 @@ def uninstall(pkg_id: str, game_root: str | Path) -> dict:
     root = _game(game_root)
     pkg = registry.get(pkg_id)
     if pkg is None:
-        raise InstallError(f"档案里没有这个包：{pkg_id}")
+        raise InstallError(i18n.t("ins.pkg_not_found", id=pkg_id))
     if pkg["state"] != "active":
-        raise InstallError(f"这个包当前状态是 {pkg['state']}，不能卸载")
+        raise InstallError(i18n.t("ins.state_no_uninstall", state=pkg['state']))
 
     safety.authorize_rels(root, list(pkg["paths"]) + _merged_of(pkg))
     guard.allow(DATA_DIR, QUARANTINE)
@@ -409,7 +413,7 @@ def uninstall(pkg_id: str, game_root: str | Path) -> dict:
                              for rel in list(pkg["paths"]) + _merged_of(pkg)])
 
     q_dir = QUARANTINE / pkg_id
-    op = safety.Operation(f"卸载 {pkg['name']}")
+    op = safety.Operation(i18n.t("ins.op_uninstall", name=pkg['name']))
     moved, missing = [], []
 
     for rel in pkg["paths"]:
@@ -459,23 +463,23 @@ def restore(pkg_id: str, game_root: str | Path) -> dict:
     root = _game(game_root)
     pkg = registry.get(pkg_id)
     if pkg is None:
-        raise InstallError(f"档案里没有这个包：{pkg_id}")
+        raise InstallError(i18n.t("ins.pkg_not_found", id=pkg_id))
     if pkg["state"] != "removed":
-        raise InstallError(f"只有「已卸载」的包能恢复，当前是 {pkg['state']}")
+        raise InstallError(i18n.t("ins.only_removed_restore", state=pkg['state']))
 
     q_dir = Path(pkg.get("quarantine") or (QUARANTINE / pkg_id))
     merged_rels = _merged_of(pkg)
     # 只合并配置、不带 mod 文件夹的包（如 Debug Console），卸载时隔离区是空的。
     # 这种包照样能恢复 —— 恢复就是「把改动重新打回游戏配置」，不依赖隔离区。
     if not q_dir.is_dir() and not merged_rels:
-        raise InstallError(f"隔离区里找不到这个包的文件：{q_dir}")
+        raise InstallError(i18n.t("ins.quarantine_missing", path=q_dir))
 
     safety.authorize_rels(root, list(pkg["paths"]) + _merged_of(pkg))
     guard.allow(DATA_DIR, QUARANTINE)
     safety.assert_writable(*[_abs(root, rel)
                              for rel in list(pkg["paths"]) + _merged_of(pkg)])
 
-    op = safety.Operation(f"恢复 {pkg['name']}")
+    op = safety.Operation(i18n.t("ins.op_restore", name=pkg['name']))
     restored, blocked = [], []
     for rel in pkg["paths"]:
         src = q_dir / rel
@@ -495,8 +499,9 @@ def restore(pkg_id: str, game_root: str | Path) -> dict:
     merge_changed = sum(int(a.get("applied") or 0) for a in merge_applied)
 
     if not restored and not merge_changed:
-        raise InstallError("隔离区里没有可恢复的文件" + (
-            f"；游戏里已有同名内容：{'、'.join(blocked[:3])}" if blocked else ""))
+        raise InstallError(
+            i18n.t("ins.restore_empty_blocked", names="、".join(blocked[:3]))
+            if blocked else i18n.t("ins.restore_empty"))
 
     enabled: list[str] = []
     if pkg.get("mods"):

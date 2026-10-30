@@ -18,6 +18,8 @@ import ctypes
 import sys
 from pathlib import Path
 
+from core import i18n
+
 # ---- GetOpenFileNameW 的常量（winuser.h / commdlg.h） ----
 OFN_NOCHANGEDIR = 0x00000008
 OFN_PATHMUSTEXIST = 0x00000800
@@ -31,11 +33,12 @@ BIF_NEWDIALOGSTYLE = 0x0040
 
 # kind -> (标题, [(说明, 通配符)])
 PRESETS = {
-    "json": ("选择译文 JSON 文件", [("译文 JSON", "*.json"), ("所有文件", "*.*")]),
-    "archive": ("选择 mod 压缩包", [("mod 压缩包", "*.zip;*.7z;*.rar"), ("所有文件", "*.*")]),
-    "exe": ("选择 Script Merger 的主程序",
-            [("Script Merger", "*.exe"), ("所有文件", "*.*")]),
-    "file": ("选择文件", [("所有文件", "*.*")]),
+    "json": ("pick.json_title", [("pick.json_filter", "*.json"), ("pick.all_files", "*.*")]),
+    "archive": ("pick.archive_title", [("pick.archive_filter", "*.zip;*.7z;*.rar"),
+                                       ("pick.all_files", "*.*")]),
+    "exe": ("pick.exe_title",
+            [("Script Merger", "*.exe"), ("pick.all_files", "*.*")]),
+    "file": ("pick.file_title", [("pick.all_files", "*.*")]),
 }
 
 
@@ -126,9 +129,10 @@ def _native_file(kind: str) -> str | None:
             ("FlagsEx", wintypes.DWORD),
         ]
 
-    title, groups = PRESETS.get(kind, PRESETS["file"])
+    title_key, groups = PRESETS.get(kind, PRESETS["file"])
+    title = i18n.t(title_key)
     # 过滤器是「说明\0通配符\0」重复，最后再来一个 \0 收尾
-    filt = "".join(f"{label} ({pat.replace(';', ', ')})\0{pat}\0" for label, pat in groups) + "\0"
+    filt = "".join(f"{i18n.t(label)} ({pat.replace(';', ', ')})\0{pat}\0" for label, pat in groups) + "\0"
 
     buf = ctypes.create_unicode_buffer(32768)
     ofn = OPENFILENAMEW()
@@ -154,7 +158,7 @@ def _native_file(kind: str) -> str | None:
     return ""
 
 
-def _native_dir(title: str = "选择文件夹") -> str | None:
+def _native_dir(title: str = "") -> str | None:
     """老式 SHBrowseForFolder：只在有独立消息循环的线程里可靠。
     这里保留实现但不默认启用（见 pick 里的说明）。"""
     from ctypes import wintypes
@@ -181,7 +185,7 @@ def _native_dir(title: str = "选择文件夹") -> str | None:
     bi = BROWSEINFOW()
     bi.hwndOwner = _owner_hwnd()
     bi.pszDisplayName = ctypes.cast(display, wintypes.LPWSTR)
-    bi.lpszTitle = title
+    bi.lpszTitle = title or i18n.t("pick.dir_title")
     bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE | BIF_EDITBOX
 
     shell.SHBrowseForFolderW.argtypes = [ctypes.POINTER(BROWSEINFOW)]
@@ -211,9 +215,10 @@ def _tk_pick(kind: str) -> str:
         pass
     try:
         if kind == "dir":
-            return filedialog.askdirectory(title="选择文件夹") or ""
-        title, groups = PRESETS.get(kind, PRESETS["file"])
-        types = [(label, pat) for label, pat in groups]
+            return filedialog.askdirectory(title=i18n.t("pick.dir_title")) or ""
+        title_key, groups = PRESETS.get(kind, PRESETS["file"])
+        title = i18n.t(title_key)
+        types = [(i18n.t(label), pat) for label, pat in groups]
         return filedialog.askopenfilename(title=title, filetypes=types) or ""
     finally:
         root.destroy()

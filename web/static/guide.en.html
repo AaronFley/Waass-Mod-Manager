@@ -1,0 +1,156 @@
+<!-- Usage note: loaded into the dialog by the "Guide" button on the settings page.
+     Written as a plain fragment (no html/head/body); styling uses the site-wide
+     CSS variables so it follows the dark/light theme without a second palette. -->
+<div class="gd">
+
+  <div class="gd-lead">
+    Waass manages what lives in The Witcher 3's <code>mods</code> folder: enable/disable,
+    install archives, load order, conflict checks, Nexus update checks, CN localization.
+    <b>It only ever touches what you click</b> — files you haven't acted on are not
+    modified by a single byte, and every write is preceded by a snapshot.
+  </div>
+
+  <section class="gd-sec">
+    <h4>First launch</h4>
+    <ol>
+      <li><b>Point it at your game folder</b>. It looks for Steam, GOG and Epic installs
+        on its own. If nothing turns up, the main screen walks you through it — pick the
+        level that <b>contains both a <code>bin</code> folder and <code>witcher3.exe</code></b>
+        (not the <code>mods</code> folder underneath it, and not your save game directory).</li>
+      <li><b>Let the first scan finish</b>. The list on the left is what's in your
+        <code>mods</code> folder, the cards on the right show the details. The first scan
+        backfills covers and author names; it takes well under a minute and won't stop
+        you from using the app meanwhile.</li>
+      <li><b>Watch the banner at the top</b>. The amber one carries at most two items at
+        a time, separated by a divider: "N mods not matched to Nexus" and "N mods have
+        updates". Both come with a button that takes you where you deal with them.
+        A separate orange banner counts "N things need attention" — <i>that</i> one is
+        the banner for real problems.</li>
+    </ol>
+  </section>
+
+  <section class="gd-sec">
+    <h4>Enable / Disable</h4>
+    <p>The toggle on each card is your on/off switch. <b>Disabling prefixes the folder
+      name with a <code>~</code></b> (<code>modHoods</code> becomes <code>~modHoods</code>).
+      The game only loads folders that start with <code>mod</code> and never even sees
+      one starting with <code>~</code> — as if it were uninstalled, except nothing was
+      actually removed.</p>
+    <p>Three reasons it works this way: it never touches <code>mods.settings</code>
+      (a file that is notoriously picky about its format), it's a one-step switch back,
+      and <b>your load order (Priority) stays intact</b> — re-enable a mod and it lands
+      exactly where it was.</p>
+  </section>
+
+  <section class="gd-sec">
+    <h4>Installing new mods</h4>
+    <p>"Import archive" in the top bar → pick a zip / 7z / rar (tar and gz work too) →
+      <b>read the preview first</b>: it lists every file about to be written into your
+      game folder and which of them overwrite existing files. Nothing is written until
+      you confirm.</p>
+    <p>Before writing anything it snapshots <code>mods.settings</code> and the menu XMLs,
+      so you can roll back afterwards. If the game is running, the install is refused
+      outright — edits made mid-session get overwritten by the game, and can also cause
+      trouble when loading save games.</p>
+  </section>
+
+  <section class="gd-sec">
+    <h4>Load order</h4>
+    <p>That's "Load order" on the left. There is exactly one rule:
+      <b>lower number wins</b> — this number is the <code>Priority</code> value in
+      <code>mods.settings</code>.</p>
+    <p>When two mods change the same file, <b>the one with the lower number takes
+      effect</b>. Equal numbers are undefined behavior; the app flags duplicates and
+      asks you to separate them. Drag &amp; drop is available with the
+      "list view + all mods + sort by load order" combination; dragging only assigns
+      numbers to enabled mods — disabled ones keep theirs untouched.</p>
+  </section>
+
+  <section class="gd-sec">
+    <h4>Conflict detection</h4>
+    <p>Only <b>enabled</b> mods are checked — disabled ones never load, so reporting
+      them would be noise.</p>
+    <ul>
+      <li><code>@wrapMethod</code>: both mods want to hook the same function. In most
+        cases they can coexist → reported as info only.</li>
+      <li><code>@replaceMethod</code>: whichever loads later replaces the entire
+        function → reported as a warning.</li>
+      <li>Inside bundles, only UI file clashes (<code>ui</code> / <code>data</code>) are
+        reported. Materials and textures covering each other is business as usual —
+        reporting that would just make you stop reading.</li>
+    </ul>
+    <p><b>Script Merger</b>: when two mods change the same script, it stitches them
+      into a single "merged files" mod. Mods built for the next-gen version generally
+      don't need merging — <b>reach for it when you run a lot of legacy mods, or when
+      the game throws script errors on launch</b>. If it lives in the <code>Merger</code>
+      folder in your game root it's found automatically; installed anywhere else, point
+      to it once via "I've installed it, set the path" and it remembers.</p>
+  </section>
+
+  <section class="gd-sec">
+    <h4>Checking for mod updates</h4>
+    <p>To check for updates, the app first has to know which Nexus page each mod is
+      (that mod ID string). It only accepts <b>local evidence</b>: what it recorded
+      itself, its own install records, the original archive filename in your download
+      folder, or links written in the mod's readme. It would rather leave the ID empty
+      than guess — a wrong binding means "check for updates" forever compares your
+      files against someone else's version numbers.</p>
+    <p>Mods it can't identify are collected under "not matched to Nexus", each with
+      "possible matches" candidates underneath — one click binds them. Self-made or
+      ported mods simply don't exist on Nexus; hit "Not on Nexus" and it stops asking.</p>
+    <p>Author, cover and latest version data is cached for 7 days and only re-fetched
+      once stale. A background pass tops up what's missing at startup, without getting
+      in your way.</p>
+  </section>
+
+  <section class="gd-sec">
+    <h4>CN localization</h4>
+    <p>The CN localization panel swaps English text in English-made mods for the
+      Chinese community translations. Mod text can live in three places: the language
+      tables (<code>cn.w3strings</code>), Chinese hardcoded in scripts, and the menu
+      XML. The panel tells you which of these still contains untranslated English.</p>
+    <ul>
+      <li><b>Only menu pages are translated by default</b>. Mod names and item names
+        are left alone — changing those tends to break in-game references.</li>
+      <li><b>Equal-length writeback</b>: the translation may not exceed the byte length
+        of the original. If it doesn't fit, the sentence gets shortened first; if it
+        still doesn't fit, the panel tells you exactly how many bytes are short —
+        <b>it never truncates</b>.</li>
+      <li><b>Mods you've already hand-localized won't be nagged about</b>: when the
+        menu XML is already Chinese, the English entries left in the language tables
+        count as stale leftovers and are merely flagged.</li>
+      <li>The originals are saved away before the first write, so you can restore
+        everything with one click at any time.</li>
+    </ul>
+  </section>
+
+  <section class="gd-sec">
+    <h4>Save game backups</h4>
+    <p>Two modes, your call. <b>Full</b> packs up the entire <code>gamesaves</code>
+      folder; <b>Incremental</b> packs only the files that changed since the last
+      backup — handy as a daily one-click habit.</p>
+    <p>Restoring overwrites your current save games, so it asks for confirmation first,
+      and takes a safety copy of the current saves before anything is touched. Backup
+      archives live in the app's own data directory, not inside the game folder.</p>
+  </section>
+
+  <section class="gd-sec">
+    <h4>When something goes wrong</h4>
+    <ul>
+      <li><b>Just made a mistake</b>: there's an "Undo" button right on the banner.
+        Older operations are in the operation log, each one individually undoable.</li>
+      <li><b>Broke a file</b>: a snapshot was taken before every write (the last 30 are
+        kept), so any operation can be reverted as a whole.</li>
+      <li><b>Uninstalled the wrong mod</b>: uninstalling never deletes — files go to
+        quarantine and can be brought back.</li>
+      <li><b>Need the disk space</b>: Settings → Storage &amp; cleanup. Core data
+        (configuration, Nexus records, groups, install records, save game backups,
+        localization originals) is never cleaned up.</li>
+    </ul>
+  </section>
+
+  <div class="gd-foot">
+    This guide covers 1.2.8. If the app ever disagrees with this page, trust the app —
+    that's our bug, and issue reports are welcome.
+  </div>
+</div>

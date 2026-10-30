@@ -30,6 +30,7 @@ import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from . import i18n
 from .paths import DATA_DIR
 
 GAME_ID = 952                     # Nexus 上 The Witcher 3 的固定编号
@@ -74,7 +75,7 @@ def _gql(query: str, timeout: float = 12.0) -> dict:
         if gap > 0:
             time.sleep(gap)
         if time.time() < _state["fail_until"]:
-            raise NexusError("刚刚请求失败过，稍后再试")
+            raise NexusError(i18n.t("nex.cooldown"))
         _state["last"] = time.time()
 
     body = json.dumps({"query": query}).encode("utf-8")
@@ -89,18 +90,18 @@ def _gql(query: str, timeout: float = 12.0) -> dict:
         with _lock:
             _state["fail_until"] = time.time() + COOL_DOWN
             _state["last_error"] = f"{type(exc).__name__}: {exc}"
-        raise NexusError(f"连不上 Nexus：{exc}") from exc
+        raise NexusError(i18n.t("nex.unreachable", err=exc)) from exc
 
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise NexusError("Nexus 返回的不是 JSON") from exc
+        raise NexusError(i18n.t("nex.bad_json")) from exc
 
     if isinstance(data, dict) and data.get("errors") and not data.get("data"):
         msg = str((data["errors"][0] or {}).get("message", ""))[:160]
-        raise NexusError(f"Nexus 说：{msg}")
+        raise NexusError(i18n.t("nex.api_error", msg=msg))
     if not isinstance(data, dict):
-        raise NexusError("Nexus 返回格式意外")
+        raise NexusError(i18n.t("nex.bad_format"))
     with _lock:
         _state["ok_at"] = time.time()
         _state["last_error"] = ""
@@ -242,7 +243,7 @@ def search(text: str, count: int = 8, timeout: float = 12.0) -> dict:
     所以这里只当「候选清单」用，不替你决定是哪一个。"""
     q = (text or "").strip()
     if not q:
-        return {"ok": False, "error": "没有关键词", "items": []}
+        return {"ok": False, "error": i18n.t("nex.no_query"), "items": []}
     q = q.replace('"', " ").replace("\\", " ")[:80]
     query = (
         '{mods(filter:{op:AND,filter:[{gameId:{value:"%d",op:EQUALS}},'
@@ -276,7 +277,7 @@ def search_multi(queries, count: int = 8, timeout: float = 12.0) -> dict:
     不拿断网去撞后面几档；命中的组会写回 `tried` 方便排查。
     """
     tried: list[str] = []
-    last: dict = {"ok": False, "error": "没有关键词", "items": []}
+    last: dict = {"ok": False, "error": i18n.t("nex.no_query"), "items": []}
     for q in queries or []:
         r = search(q, count=count, timeout=timeout)
         tried.append(q)
@@ -483,7 +484,7 @@ def refresh(ids, with_cover: bool = True, force: bool = False,
                 covers += 1
     return {"ok": bool(got) or not todo, "requested": len(todo),
             "got": len(got), "covers": covers,
-            "error": "" if got or not todo else (_state.get("last_error") or "没取到资料")}
+            "error": "" if got or not todo else (_state.get("last_error") or i18n.t("nex.no_data"))}
 
 
 def status() -> dict:

@@ -11,11 +11,11 @@ let TRK_GUESS_AT = 0;
 
 async function openTrackDialog(filter = 'all', findKey = '') {
   TRK_FILTER = filter;
-  openModal('检查 MOD 更新', '<div class="upd-loading">正在读取记录…</div>', { wide: true });
+  openModal(T('ui.nav_track'), `<div class="upd-loading">${T('track.loading_log')}</div>`, { wide: true });
   try {
     TRK = await api('/api/track');
   } catch (e) {
-    $('#modalBody').innerHTML = `<div class="pkg-hint">读取失败：${esc(e.message)}</div>`;
+    $('#modalBody').innerHTML = `<div class="pkg-hint">${T('track.load_failed', { error: esc(e.message) })}</div>`;
     return;
   }
   // 从详情页点「搜一下」进来的：不是让你再找一遍，直接展开这一条的候选
@@ -52,13 +52,13 @@ async function loadGuesses(force = false) {
 async function pickCandidate(key, modId, btn) {
   const old = btn.textContent;
   btn.disabled = true;
-  btn.textContent = '正在绑定…';
+  btn.textContent = T('track.binding');
   try {
     await api('/api/nexus/link', { key, mod_id: modId });
     delete TRK_GUESS[key];
     TRK = await api('/api/track');
     renderTrack();
-    toast('已对上号，正在取封面和作者…', 2500);
+    toast(T('track.linked_fetching'), 2500);
     setTimeout(async () => {
       try {
         TRK = await api('/api/track');
@@ -67,7 +67,7 @@ async function pickCandidate(key, modId, btn) {
       } catch (e) { /* 下次刷新也会补上 */ }
     }, 2500);
   } catch (e) {
-    toast('绑定失败：' + e.message, 4000);
+    toast(T('track.bind_failed', { error: e.message }), 4000);
     btn.disabled = false;
     btn.textContent = old;
   }
@@ -104,38 +104,37 @@ function renderTrack() {
 
     const ver = r.version
       ? `<span class="trk-ver">${esc(r.version)}<em>${esc(r.version_cn || '')}</em></span>`
-      : '<span class="trk-ver is-none">未知</span>';
+      : `<span class="trk-ver is-none">${T('common.unknown')}</span>`;
 
     let latest;
     if (r.latest) {
       // Nexus 页面上作者手填的 version 常落后于他传的主文件，两个数不一样时
       // 把一个灰提示挂上，免得你去网页一看数字对不上，怀疑程序算错。
       const pageHint = (r.latest_page && r.latest_page !== r.latest)
-        ? ` title="Nexus 页面顶部显示的是 ${r.latest_page}，那是作者手填的展示值；这里用的是他上传的主文件版本"`
+        ? ` title="${T('track.page_version_hint', { v: r.latest_page })}"`
         : '';
       const tag = r.latest_cn
-        ? `<em class="${r.latest_cn === '刚查到' ? 'is-live' : ''}">${esc(r.latest_cn)}</em>`
+        ? `<em class="${r.latest_code === 'fresh' ? 'is-live' : ''}">${esc(r.latest_cn)}</em>`
         : '';
       latest = `<span class="trk-latest ${r.state === 'new' ? 'is-new' : ''}"${pageHint}>${esc(r.latest)}${tag}`
-        + (pageHint ? '<b class="trk-srcv">主文件</b>' : '')
+        + (pageHint ? `<b class="trk-srcv">${T('track.src_main_file')}</b>` : '')
         + `</span>`;
     } else {
       latest = '<span class="trk-latest is-none">—</span>';
     }
 
     const ahead = r.state === 'ahead'
-      ? `<div class="trk-ahead">本地这个版本号比 Nexus 记录的高。多半是两边数字来自不同地方
-         （下载包文件名 / 旧管理器记录 / 页面上作者手填的号），不代表你装了未来版本。</div>`
+      ? `<div class="trk-ahead">${T('track.ahead_note')}</div>`
       : '';
 
     // 缺 ID 的模组：有候选就直接摆出来让人点，别逼着他再去点一次「搜一下」。
     // 已标记「不在 Nexus 上」的就不摆候选了 —— 那是噪音。
     const guess = (!r.nexus_id && !r.ignored) ? (TRK_GUESS[r.key] || null) : null;
     const guessHtml = (guess && (guess.items || []).length)
-      ? `<div class="trk-guess"><span class="trk-cap">可能是</span>
+      ? `<div class="trk-guess"><span class="trk-cap">${T('track.guess_cap')}</span>
           ${guess.items.slice(0, 4).map(it => {
-            const hint = it.src === 'local' ? ' · 你的下载目录里有这个包'
-              : it.src === 'both' ? ' · 本地和 Nexus 都对得上' : '';
+            const hint = it.src === 'local' ? T('track.guess_hint_local')
+              : it.src === 'both' ? T('track.guess_hint_both') : '';
             return `<button class="trk-gbtn" data-pick="${esc(r.key)}" data-id="${esc(String(it.mod_id))}"
               title="${esc(it.name)}${esc(hint)}">${esc(it.name)}${it.author ? `<em>${esc(it.author)}</em>` : ''}</button>`;
           }).join('')}
@@ -143,14 +142,14 @@ function renderTrack() {
       : '';
 
     const acts = r.nexus_id
-      ? `<button class="btn btn-sm" data-open="${esc(r.url)}">模组页</button>
-         <button class="btn btn-sm btn-ghost" data-open="${esc(r.url)}?tab=files">下载页</button>
-         <button class="link-btn trk-edit" data-edit="${esc(r.key)}">改 ID</button>`
-      : `<button class="btn btn-sm" data-find="${esc(r.key)}">搜一下</button>
-         <button class="link-btn trk-edit" data-edit="${esc(r.key)}">填 ID</button>
+      ? `<button class="btn btn-sm" data-open="${esc(r.url)}">${T('track.btn_mod_page')}</button>
+         <button class="btn btn-sm btn-ghost" data-open="${esc(r.url)}?tab=files">${T('track.btn_files')}</button>
+         <button class="link-btn trk-edit" data-edit="${esc(r.key)}">${T('track.btn_edit_id')}</button>`
+      : `<button class="btn btn-sm" data-find="${esc(r.key)}">${T('track.btn_find')}</button>
+         <button class="link-btn trk-edit" data-edit="${esc(r.key)}">${T('track.btn_set_id')}</button>
          <button class="link-btn trk-edit" data-mute="${esc(r.key)}" data-on="${r.ignored ? '0' : '1'}"
-           title="${r.ignored ? '重新开始提醒这一个' : '自制或移植的模组不在 Nexus 上，标了就不再提醒'}">
-           ${r.ignored ? '撤销' : '不在 Nexus'}</button>`;
+           title="${r.ignored ? T('track.ignore_off_title') : T('track.ignore_on_title')}">
+           ${r.ignored ? T('track.btn_unmute') : T('track.btn_mute')}</button>`;
 
     const cover = r.cover
       ? `<img class="trk-cover" src="/${esc(r.cover)}" alt="" loading="lazy">`
@@ -162,53 +161,49 @@ function renderTrack() {
         <div class="trk-name">${esc(title)}</div>
         <div class="trk-sub">${esc(sub)}</div>
         ${ahead}
-        ${r.ignored ? '<div class="trk-ahead">已标记为「不在 Nexus 上」，不再提醒。</div>' : ''}
+        ${r.ignored ? `<div class="trk-ahead">${T('track.ignored_note')}</div>` : ''}
       </div>
       <div class="trk-vers">
-        <span class="trk-cap">本地</span>${ver}
+        <span class="trk-cap">${T('track.col_local')}</span>${ver}
         <span class="trk-arrow">→</span>
         <span class="trk-cap">Nexus</span>${latest}
       </div>
       <div class="trk-acts">${acts}</div>
       ${guessHtml}
     </div>`;
-  }).join('') : '<div class="pkg-hint" style="margin-top:6px">这一类里没有模组。</div>';
+  }).join('') : `<div class="pkg-hint" style="margin-top:6px">${T('track.empty_filter')}</div>`;
 
   const busy = TRK_BUSY
     ? `<span class="trk-busy">${esc(TRK_BUSY)}</span>` : '';
 
   $('#modalBody').innerHTML = `
     <div class="trk-stats">
-      <div class="trk-stat"><b>${st.total || 0}</b><span>模组</span></div>
-      <div class="trk-stat"><b>${st.linked || 0}</b><span>有 Nexus 页</span></div>
-      <div class="trk-stat"><b>${st.with_meta || 0}</b><span>查到了资料</span></div>
-      <div class="trk-stat ${st.new ? 'is-danger' : ''}"><b>${st.new || 0}</b><span>能更新</span></div>
+      <div class="trk-stat"><b>${st.total || 0}</b><span>${T('track.stat_mods')}</span></div>
+      <div class="trk-stat"><b>${st.linked || 0}</b><span>${T('track.stat_linked')}</span></div>
+      <div class="trk-stat"><b>${st.with_meta || 0}</b><span>${T('track.stat_meta')}</span></div>
+      <div class="trk-stat ${st.new ? 'is-danger' : ''}"><b>${st.new || 0}</b><span>${T('track.state_update')}</span></div>
     </div>
 
     <div class="trk-toolbar">
       <div class="pkg-hint" style="margin:0">
-        「Nexus」那一列是这个 mod <b>主文件</b>的版本，不是页面上作者手填的那个数字
-        —— 后者经常落后于他自己传的文件。资料 7 天更新一次；
-        标记<i class="trk-tag-demo">刚查到</i>的是本次真正联的网，<i class="trk-tag-demo is-old">历史记录</i>是以前存下的旧数。
+        ${T('track.hint_column')}
       </div>
-      <button class="btn btn-sm" id="trkRefresh" ${TRK_BUSY ? 'disabled' : ''}>刷新资料</button>
+      <button class="btn btn-sm" id="trkRefresh" ${TRK_BUSY ? 'disabled' : ''}>${T('track.btn_refresh_meta')}</button>
     </div>
 
     <div class="trk-chips">
-      ${chip('all', '全部', all.length)}
-      ${chip('new', '能更新', all.filter(r => r.state === 'new').length)}
-      ${st.ahead ? chip('ahead', '本地更高', st.ahead) : ''}
-      ${chip('unknown', '版本未知', all.filter(r => !r.version).length)}
-      ${chip('missing', '缺 ID', all.filter(r => !r.nexus_id).length)}
+      ${chip('all', T('track.chip_all'), all.length)}
+      ${chip('new', T('track.state_update'), all.filter(r => r.state === 'new').length)}
+      ${st.ahead ? chip('ahead', T('track.state_ahead'), st.ahead) : ''}
+      ${chip('unknown', T('track.state_version_unknown'), all.filter(r => !r.version).length)}
+      ${chip('missing', T('track.chip_missing'), all.filter(r => !r.nexus_id).length)}
       ${busy}
     </div>
 
     <div class="trk-list">${list}</div>
 
     <div class="pv-foot" style="margin-top:10px;line-height:1.7">
-      缺 ID 的模组，程序会先自己认：下载目录里留着原包、以前用本程序装过，
-      都能直接对上号，不用你动手。认不出的会在下面列出「可能是」——
-      点一个就好，之后版本、封面、作者就都能自动更新了。
+      ${T('track.missing_footer')}
     </div>`;
 
   bindTrack();
@@ -234,8 +229,8 @@ function bindTrack() {
 /* 刷新全部：一次批量请求，把过期和缺失的都补上 */
 async function refreshAll(btn) {
   btn.disabled = true;
-  btn.textContent = '正在查…';
-  TRK_BUSY = '正在连 Nexus 取资料，稍等…';
+  btn.textContent = T('track.checking');
+  TRK_BUSY = T('track.busy_fetch');
   const keep = $('#modalBody .trk-chips');
   if (keep) keep.insertAdjacentHTML('beforeend', `<span class="trk-busy">${TRK_BUSY}</span>`);
   try {
@@ -243,19 +238,21 @@ async function refreshAll(btn) {
     TRK = await api('/api/track');
     TRK_BUSY = '';
     if (res.error && !res.got) {
-      toast('没查到：' + res.error, 5000);
+      toast(T('track.query_failed', { error: res.error }), 5000);
     } else if (!res.got && !res.requested) {
       // 一个 ID 都没有时，说「资料都是新的」是骗人的 —— 实情是没东西可查。
       // 2026-10-30 的反馈就是这个：用户点了刷新，看到「都是新的」，
       // 以为同步坏了查不出来。
       const miss = TRK?.stats?.missing || 0;
       toast(miss
-        ? `没有可查的：还有 ${miss} 个模组没认出 Nexus ID。先点上面「缺 ID」把它们对上号`
-        : '资料都是新的，没有需要查的', 6000);
+        ? TN('track.nothing_missing_one', 'track.nothing_missing_many', miss)
+        : T('track.all_fresh'), 6000);
     } else {
       toast(res.got
-        ? `更新了 ${res.got} 个模组的资料${res.covers ? `，下载了 ${res.covers} 张封面` : ''}`
-        : '资料都是新的，没有需要查的', 4000);
+        ? (res.covers
+            ? TN('track.refreshed_covers_one', 'track.refreshed_covers_many', res.got, { m: res.covers })
+            : TN('track.refreshed_one', 'track.refreshed_many', res.got))
+        : T('track.all_fresh'), 4000);
     }
     renderTrack();
     if (TRK?.stats?.missing) loadGuesses(true);   // 顺手把候选也刷一遍
@@ -263,8 +260,8 @@ async function refreshAll(btn) {
   } catch (e) {
     TRK_BUSY = '';
     btn.disabled = false;
-    btn.textContent = '刷新资料';
-    toast('刷新失败：' + e.message, 5000);
+    btn.textContent = T('track.btn_refresh_meta');
+    toast(T('track.refresh_failed', { error: e.message }), 5000);
   }
 }
 
@@ -276,9 +273,9 @@ async function toggleIgnore(key, on) {
     TRK = await api('/api/track');
     renderTrack();
     load();
-    toast(on ? '好，以后不再提醒这一个' : '已恢复提醒', 2500);
+    toast(on ? T('track.muted_done') : T('track.unmuted_done'), 2500);
   } catch (e) {
-    toast('没保存成功：' + e.message, 4000);
+    toast(T('track.mute_failed', { error: e.message }), 4000);
   }
 }
 
@@ -288,7 +285,7 @@ async function searchAndPick(key) {
   const rowEl = $(`#modalBody [data-row="${CSS.escape(key)}"]`);
   if (!rowEl) return;
   const q = guessQuery(row.name_nexus || row.name || key);
-  rowEl.querySelector('.trk-acts').innerHTML = '<span class="trk-busy">正在搜…</span>';
+  rowEl.querySelector('.trk-acts').innerHTML = `<span class="trk-busy">${T('track.searching')}</span>`;
 
   let res;
   try {
@@ -298,9 +295,9 @@ async function searchAndPick(key) {
   }
   if (!res.ok || !res.items?.length) {
     rowEl.querySelector('.trk-acts').innerHTML = `
-      <span class="trk-none">${res.error ? esc(res.error) : '没搜到'}</span>
-      <button class="btn btn-sm" data-open="${esc(row.search || '')}">自己去搜</button>
-      <button class="link-btn" data-edit="${esc(key)}">填 ID</button>`;
+      <span class="trk-none">${res.error ? esc(res.error) : T('track.not_found')}</span>
+      <button class="btn btn-sm" data-open="${esc(row.search || '')}">${T('track.btn_search_self')}</button>
+      <button class="link-btn" data-edit="${esc(key)}">${T('track.btn_set_id')}</button>`;
     bindTrack();
     return;
   }
@@ -311,7 +308,7 @@ async function searchAndPick(key) {
       <span class="cand-body">
         <span class="cand-name">${esc(it.name)}</span>
         <span class="cand-sub">${esc(it.author || '')}${it.version ? ' · v' + esc(it.version) : ''}${
-          it.downloads ? ' · ' + Number(it.downloads).toLocaleString() + ' 下载' : ''}</span>
+          it.downloads ? ` · ${T('track.downloads_n', { n: Number(it.downloads).toLocaleString() })}` : ''}</span>
       </span>
     </button>`).join('');
 
@@ -319,13 +316,13 @@ async function searchAndPick(key) {
   box.className = 'cand-box';
   box.innerHTML = `
     <div class="cand-head">
-      搜「<b>${esc(q)}</b>」找到 ${res.items.length} 个，点一个确认：
-      <button class="link-btn" id="candCancel">取消</button>
+      ${T('track.pick_header', { q: esc(q), n: res.items.length })}
+      <button class="link-btn" id="candCancel">${T('common.cancel')}</button>
     </div>
     <div class="cand-list">${cands}</div>
   `;
   rowEl.after(box);
-  rowEl.querySelector('.trk-acts').innerHTML = '<span class="trk-busy">等你挑…</span>';
+  rowEl.querySelector('.trk-acts').innerHTML = `<span class="trk-busy">${T('track.await_pick')}</span>`;
 
   $('#candCancel').onclick = () => renderTrack();
   $$('.cand', box).forEach(b => {
@@ -333,12 +330,12 @@ async function searchAndPick(key) {
       b.classList.add('is-busy');
       try {
         const r = await api('/api/nexus/link', { key, mod_id: b.dataset.pick, cover: true });
-        toast(`已关联：${r.meta?.name || b.dataset.pick}`, 3500);
+        toast(T('track.linked_ok', { name: r.meta?.name || b.dataset.pick }), 3500);
         TRK = await api('/api/track');
         renderTrack();
         load();
       } catch (e) {
-        toast('关联失败：' + e.message, 4500);
+        toast(T('track.attach_failed', { error: e.message }), 4500);
         b.classList.remove('is-busy');
       }
     };
@@ -352,9 +349,9 @@ function editTrackId(key) {
   if (!rowEl) return;
   const cur = row.nexus_id || '';
   rowEl.querySelector('.trk-acts').innerHTML = `
-    <input class="trk-in" id="trkIn" value="${esc(cur)}" placeholder="ID 或整条网址" spellcheck="false">
-    <button class="btn btn-sm btn-primary" id="trkOk">保存</button>
-    <button class="link-btn" id="trkCancel">取消</button>`;
+    <input class="trk-in" id="trkIn" value="${esc(cur)}" placeholder="${T('track.id_placeholder')}" spellcheck="false">
+    <button class="btn btn-sm btn-primary" id="trkOk">${T('common.save')}</button>
+    <button class="link-btn" id="trkCancel">${T('common.cancel')}</button>`;
 
   const input = $('#trkIn');
   input.focus();
@@ -362,10 +359,10 @@ function editTrackId(key) {
 
   const save = async () => {
     const v = input.value.trim();
-    if (!v) return toast('请填 Nexus ID 或页面网址');
+    if (!v) return toast(T('track.need_id'));
     try {
       await api('/api/track', { action: 'set', key, ref: v });
-      toast(`「${row.name_cn || row.name}」已记录，正在取资料…`, 2500);
+      toast(T('track.id_saved', { name: row.name_cn || row.name }), 2500);
       TRK = await api('/api/track');
       renderTrack();
       load();
@@ -374,7 +371,7 @@ function editTrackId(key) {
         .then(t => { TRK = t; renderTrack(); load(); })
         .catch(() => {});
     } catch (e) {
-      toast('保存失败：' + e.message, 4000);
+      toast(T('track.save_failed', { error: e.message }), 4000);
     }
   };
 

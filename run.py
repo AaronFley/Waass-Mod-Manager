@@ -46,6 +46,7 @@ def _silence_streams() -> None:
 
 _silence_streams()
 
+from core import i18n                                               # noqa: E402
 from server import STATE, mark_app_window, start_background          # noqa: E402
 
 MUTEX_NAME = "Local\\WaassModManager_SingleInstance"
@@ -160,9 +161,7 @@ def _crash_hook() -> None:
             (DATA_DIR / "crash.log").write_text(text, encoding="utf-8")
         except OSError:
             pass
-        alert("程序遇到了意外错误，已经停下来了。\n\n"
-              f"{exc_type.__name__}: {exc}\n\n"
-              "详细信息写在数据目录的 crash.log 里，把它发给我就能定位。",
+        alert(i18n.t("run.crash", what=f"{exc_type.__name__}: {exc}"),
               icon=0x10)
         os._exit(1)
     sys.excepthook = hook
@@ -178,15 +177,13 @@ def main() -> int:
     _crash_hook()
 
     if not single_instance():
-        alert("Waass 已经在运行了。\n\n"
-              "先关掉那个窗口再打开；如果找不到窗口，等几秒再试"
-              "（关掉窗口后程序会自动退出）。", icon=0x30)
+        alert(i18n.t("run.already_running"), icon=0x30)
         return 1
 
     try:
         httpd, port = start_background(args.port, watch_close=not args.serve_only)
     except OSError as exc:
-        alert(f"本地服务起不来：{exc}\n\n可能是防火墙或端口被占用。", icon=0x10)
+        alert(i18n.t("run.server_start_failed", err=exc), icon=0x10)
         return 1
 
     url = f"http://127.0.0.1:{port}/"

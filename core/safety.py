@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import guard
+from . import i18n
 from .paths import DATA_DIR, game_layout
 
 SNAP_DIR = DATA_DIR / "snapshots"
@@ -120,7 +121,7 @@ def authorize_path(p) -> None:
     仍然要求它落在已授权目录里，否则照样拒绝 —— 不是万能钥匙。
     """
     from pathlib import Path as _P
-    guard.assert_can_write(_P(p), "单独授权写入")
+    guard.assert_can_write(_P(p), i18n.t("safe.what_single"))
 
 
 def assert_writable(*paths) -> None:
@@ -130,9 +131,9 @@ def assert_writable(*paths) -> None:
     而不是"感觉安全"就往下写。
     """
     if game_running():
-        raise GameRunning("游戏正在运行。请先退出游戏再改动模组，否则改动会被游戏覆盖或导致读档异常。")
+        raise GameRunning(i18n.t("safe.game_running"))
     if paths:
-        guard.assert_can_write_many([p for p in paths if p is not None], "写入前预检")
+        guard.assert_can_write_many([p for p in paths if p is not None], i18n.t("safe.what_precheck"))
 
 
 # ---------------- 快照与日志 ----------------
@@ -174,7 +175,7 @@ class Operation:
     def backup(self, path: Path) -> None:
         """把即将被修改的文件存一份。文件不存在时也会记录，方便回滚时删除。"""
         p = Path(path)
-        guard.assert_can_write(p, f"快照 {self.label}")
+        guard.assert_can_write(p, i18n.t("safe.what_snapshot", label=self.label))
         existed = p.is_file()
         rec = {"path": str(p), "existed": existed, "backup": ""}
         if existed:
@@ -185,12 +186,12 @@ class Operation:
         self.files.append(rec)
 
     def record_rename(self, src: Path, dst: Path) -> None:
-        guard.assert_can_write(src, "改名来源")
-        guard.assert_can_write(dst, "改名目标")
+        guard.assert_can_write(src, i18n.t("safe.what_rename_src"))
+        guard.assert_can_write(dst, i18n.t("safe.what_rename_dst"))
         self.renames.append({"from": str(src), "to": str(dst)})
 
     def record_create(self, path: Path) -> None:
-        guard.assert_can_write(path, "新建")
+        guard.assert_can_write(path, i18n.t("safe.what_create"))
         self.created.append(str(path))
 
     # --- 提交 ---
@@ -267,7 +268,7 @@ def rollback_op(op: "Operation") -> None:
     errors: list[str] = []
     _revert(op.created, op.files, op.renames, lambda p: True, errors)
     if errors:
-        raise RuntimeError("安装失败，且回滚没做干净：" + "；".join(errors))
+        raise RuntimeError(i18n.t("safe.rollback_dirty", errs="；".join(errors)))
 
 
 def _authorize_for_undo(entry: dict) -> None:
@@ -298,7 +299,7 @@ def undo_last() -> tuple[bool, str]:
     """回滚最后一次操作。返回 (是否成功, 说明)。"""
     items = load_journal()
     if not items:
-        return False, "没有可撤销的操作"
+        return False, i18n.t("safe.undo_none")
     entry = items.pop()
 
     # 白名单是进程内的，冷启动时是空的。用户装完关掉程序、第二天打开再点
@@ -331,12 +332,10 @@ def undo_last() -> tuple[bool, str]:
         items.append(entry)
     save_journal(items)
     if blocked:
-        return False, (
-            f"有 {len(blocked)} 个路径没有写入授权，已原样跳过（未改动）："
-            + "；".join(blocked[:3])
-        )
+        return False, i18n.tn("safe.undo_blocked_one", "safe.undo_blocked_many",
+                              len(blocked), paths="；".join(blocked[:3]))
     if errors:
-        return False, "部分内容未能恢复：" + "；".join(errors)
+        return False, i18n.t("safe.undo_errors", errs="；".join(errors))
     return True, entry.get("label", "")
 
 

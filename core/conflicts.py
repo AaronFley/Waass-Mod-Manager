@@ -35,7 +35,7 @@ from pathlib import Path
 
 from .paths import game_layout
 from .settings_ini import SettingsFile
-from . import bundle_entries, merger, scripts_meta, w3strings
+from . import bundle_entries, i18n, merger, scripts_meta, w3strings
 
 _cache: dict[str, tuple[float, dict]] = {}
 _CACHE_TTL = 90.0
@@ -155,26 +155,26 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
     for (level, involved, covered), files in sorted(
             buckets.items(), key=lambda x: (x[0][0] == "ok", -len(x[1]))):
         names = "、".join(f"『{_name_of(mods, k)}』" for k in involved)
-        more = f"（还有 {len(files) - 3} 个同类文件）" if len(files) > 3 else ""
+        more = i18n.t("conf.more_files", n=len(files) - 3) if len(files) > 3 else ""
         if level == "ok":
             merged_count += len(files)
-            srcs = "、".join(f"『{_name_of(mods, k)}』" for k in covered) or "来源模组"
+            srcs = "、".join(f"『{_name_of(mods, k)}』" for k in covered) or i18n.t("conf.source_mods")
             prod = next((k for k in involved
                          if k.lower() in prod_names), "")
             prod_name = _name_of(mods, prod) if prod else inv.get("merged_name", "")
             add("script_merged", "ok",
-                f"{len(files)} 个脚本已合并，无需处理",
-                f"{srcs} 的改动已经合进『{prod_name}』，这个文件夹排在所有模组之前加载，"
-                f"会覆盖它们的原文件，所以 {len(involved)} 个同名不是冲突。{more}",
+                i18n.tn("conf.script_merged_one", "conf.script_merged_many", len(files)),
+                i18n.t("conf.script_merged_detail", srcs=srcs, prod=prod_name,
+                       n=len(involved), more=more),
                 list(involved), files)
             continue
-        detail = ("需要跑一次 Script Merger 合并，否则只有排在后面的那份生效。"
+        detail = (i18n.t("conf.need_merge_hint")
                   if level == "merge" else
-                  "合并文件夹里有这个文件，但合并记录里没有它，可能是手工拷进去的，"
-                  "建议用 Script Merger 重跑一次确认。")
+                  i18n.t("conf.unrecorded_hint"))
         add("script_overlap", "merge",
-            f"{len(involved)} 个模组共有 {len(files)} 个同名脚本",
-            f"{names} 会覆盖同一批脚本文件。{detail}{more}",
+            i18n.tn("conf.script_overlap_one", "conf.script_overlap_many",
+                    len(involved), m=len(files)),
+            i18n.t("conf.script_overlap_detail", names=names, detail=detail, more=more),
             list(involved), files)
 
     # ---------- 1b. 合并台账失效 ----------
@@ -185,18 +185,16 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
         if dead:
             names = "、".join(f"『{n}』" for n in dead[:5])
             add("merge_stale", "warn",
-                f"合并记录里有 {len(dead)} 个模组已经不在硬盘上",
-                f"{names} 参与过脚本合并，但文件夹已经没了。"
-                f"『{inv.get('merged_name')}』里还留着它们的代码，游戏启动可能报"
-                f"「找不到某个类」。打开 Script Merger 重跑一次会自动清掉这些残留。",
+                i18n.tn("conf.merge_stale_one", "conf.merge_stale_many", len(dead)),
+                i18n.t("conf.merge_stale_detail", names=names,
+                       prod=inv.get("merged_name")),
                 [], [])
         prod = inv.get("merged_name") or ""
         if prod and inv.get("merges") and (mods_root / prod).is_dir():
             if not merger.script_files_of(root, prod):
                 add("merge_empty", "warn",
-                    f"『{prod}』是个空壳",
-                    "合并记录说有脚本被合并过，但这个文件夹里找不到任何 .ws。"
-                    "可能是 Script Merger 清理后没重新合并，游戏里那几处改动会失效。",
+                    i18n.t("conf.merge_empty_title", prod=prod),
+                    i18n.t("conf.merge_empty_detail"),
                     [])
 
     # ---------- 1c. 合订本不生效 ----------
@@ -206,10 +204,8 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
     mstate = merger.merged_state(root, inv, settings)
     if mstate["exists"] and not mstate["ok"]:
         add("merge_unregistered", "warn",
-            f"合订本『{mstate['name']}』不生效",
-            f"{mstate['problem']}。进游戏会报「Could not find function ...」，"
-            f"但报错只会指向源 mod，看不出真正原因。"
-            f"打开「加载顺序」点一次保存，程序会自动把它补到第一位。",
+            i18n.t("conf.merge_unreg_title", name=mstate['name']),
+            i18n.t("conf.merge_unreg_detail", problem=mstate['problem']),
             [], [])
 
     # ---------- 1d. 注解挂在同一个函数上 ----------
@@ -235,23 +231,19 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
 
     for who, funcs in sorted(rep_groups.items(), key=lambda x: -len(x[1])):
         names = "、".join(f"『{_name_of(mods, k)}』" for k in who)
-        more = f"（还有 {len(funcs) - 3} 个同类的没列出）" if len(funcs) > 3 else ""
+        more = i18n.t("conf.more_funcs_hidden", n=len(funcs) - 3) if len(funcs) > 3 else ""
         add("anno_replace", "warn",
-            f"{len(funcs)} 个函数被整段替换了两次",
-            f"{names} 都用 @replaceMethod 把 {funcs[0]} 这类函数整段换掉了。"
-            f"游戏只保留最后生效的那一份，另一份的改动（连同它包在别处的逻辑）会一起消失，"
-            f"而且不会有任何报错。这类没法自动合并 —— 要么调加载顺序决定谁生效，"
-            f"要么请作者改成 @wrapMethod。{more}",
+            i18n.tn("conf.anno_replace_one", "conf.anno_replace_many", len(funcs)),
+            i18n.t("conf.anno_replace_detail", names=names, fn=funcs[0], more=more),
             list(who), funcs)
 
     for who, funcs in sorted(wrap_groups.items(), key=lambda x: -len(x[1])):
         names = "、".join(f"『{_name_of(mods, k)}』" for k in who)
-        more = f"（还有 {len(funcs) - 3} 个同类的没列出）" if len(funcs) > 3 else ""
+        more = i18n.t("conf.more_funcs_hidden", n=len(funcs) - 3) if len(funcs) > 3 else ""
         add("anno_wrap", "info",
-            f"{len(funcs)} 个函数被 {len(who)} 个模组分别加了逻辑",
-            f"{names} 都在 {funcs[0]} 这类函数前后挂了自己的代码。"
-            f"这是能共存的叠加机制，本身不是问题；但叠加顺序由加载顺序决定 —— "
-            f"如果改过顺序之后某个功能表现变了，先回来对照这个列表。{more}",
+            i18n.tn("conf.anno_wrap_one", "conf.anno_wrap_many",
+                    len(funcs), m=len(who)),
+            i18n.t("conf.anno_wrap_detail", names=names, fn=funcs[0], more=more),
             list(who), funcs)
 
     # ---------- 1e. 脚本编码 ----------
@@ -261,12 +253,10 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
         mods_in = sorted({k for k, _r, _e in enc_bad})
         names = "、".join(f"『{_name_of(mods, k)}』" for k in mods_in)
         add("ws_encoding", "warn",
-            f"{len(enc_bad)} 个脚本不是 UTF-8",
-            f"{names} 里有 {enc_bad[0][2]} 编码的脚本。重制版 5.00 只读 UTF-8，"
-            f"这些文件会被当成乱码，整份脚本编译不过，进游戏就是一屏红字。"
-            f"这类 mod 是 4.x 时代的老包，需要作者用新工具重新导出；"
-            f"自己转码不一定能救回来。",
-            mods_in, [f"{rel}（{enc}）" for _k, rel, enc in enc_bad])
+            i18n.tn("conf.ws_encoding_one", "conf.ws_encoding_many", len(enc_bad)),
+            i18n.t("conf.ws_encoding_detail", names=names, enc=enc_bad[0][2]),
+            mods_in,
+            [i18n.t("conf.file_enc", rel=rel, enc=enc) for _k, rel, enc in enc_bad])
 
     # ---------- 2. 菜单 xml 同名 ----------
     menu_owner: dict[str, list[str]] = {}
@@ -286,9 +276,8 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
             continue
         names = "、".join(f"『{_name_of(mods, k)}』" for k in uniq)
         add("menu_xml_clash", "warn",
-            f"菜单文件重名：{xml}",
-            f"{names} 都想写这个菜单文件。游戏只认最后写入的那一份，"
-            f"另一个 mod 的设置项会从菜单里消失。装之前先确认它们是不是同一个 mod 的不同版本。",
+            i18n.t("conf.menu_xml_title", xml=xml),
+            i18n.t("conf.menu_xml_detail", names=names),
             uniq, [xml])
 
     # ---------- 3. 语言文件 ----------
@@ -314,8 +303,8 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
             continue
         names = "、".join(f"『{_name_of(mods, k)}』" for k in uniq)
         add("w3strings_clash", "warn",
-            f"语言文件重名：{rel}",
-            f"{names} 在同一路径下都有这份语言文件。同目录同名只会读到其中一份。",
+            i18n.t("conf.w3strings_title", rel=rel),
+            i18n.t("conf.w3strings_detail", names=names),
             uniq, [rel])
 
     # ---------- 3b. 资源包内部的同名资源 ----------
@@ -353,28 +342,26 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
         leaves = [_leaf(f) for f in files]
         head = "、".join(leaves[:3])
         if len(files) > 3:
-            what = f"{head} 这些文件（还有 {len(files) - 3} 个）"
+            what = i18n.t("conf.files_more", head=head, n=len(files) - 3)
         elif len(files) > 1:
-            what = f"{head} 这些文件"
+            what = i18n.t("conf.files_these", head=head)
         else:
             what = head
         add("bundle_ui", "warn",
-            f"{len(files)} 个界面文件被 {len(uniq)} 个模组同时提供",
-            f"{names} 的包里都有 {what}。游戏只会加载其中一份，"
-            f"另一份的界面改动会整片消失 —— 常见特征是「功能还在，但界面不对/看不见」。"
-            f"这类资源没法像脚本那样合并。先别急着卸载：有时上游模组已经把对方的改动"
-            f"整合进去了，要看实际效果再决定。",
+            i18n.tn("conf.bundle_ui_one", "conf.bundle_ui_many",
+                    len(files), m=len(uniq)),
+            i18n.t("conf.bundle_ui_detail", names=names, what=what),
             list(uniq), leaves)
 
     for uniq, files in sorted(data_owner.items(), key=lambda x: -len(x[1])):
         names = "、".join(f"『{_name_of(mods, k)}』" for k in uniq)
         leaves = [_leaf(f) for f in files]
         head = "、".join(leaves[:3])
-        more = f"（还有 {len(files) - 3} 个）" if len(files) > 3 else ""
+        more = i18n.t("conf.more_n", n=len(files) - 3) if len(files) > 3 else ""
         add("bundle_data", "info",
-            f"{len(files)} 个定义文件被 {len(uniq)} 个模组同时提供",
-            f"{names} 的包里都有 {head}{more}。这类是物品/数值定义，"
-            f"同样是只有一份生效，另一方的改动会失效，且不会报错。",
+            i18n.tn("conf.bundle_data_one", "conf.bundle_data_many",
+                    len(files), m=len(uniq)),
+            i18n.t("conf.bundle_data_detail", names=names, head=head, more=more),
             list(uniq), leaves)
 
     # ---------- 3c. 语言表版本落后 ----------
@@ -401,11 +388,8 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
     if stale_w3:
         pairs = "、".join(f"『{_name_of(mods, k)}』(v{v})" for k, (_r, v) in stale_w3.items())
         add("w3strings_stale", "warn",
-            f"{len(stale_w3)} 个模组的语言表比游戏旧",
-            f"游戏本体是 v{base_ver}，{pairs} 的表版本落后。"
-            f"游戏读不出它们新增的文字，界面上这类地方会显示成 ## 或空白 —— "
-            f"功能通常还在，只是没字（比如某个该出现的框没出现）。"
-            f"这是作者打包时用的旧工具，只能等模组更新。",
+            i18n.tn("conf.w3_stale_one", "conf.w3_stale_many", len(stale_w3)),
+            i18n.t("conf.w3_stale_detail", base=base_ver, pairs=pairs),
             list(stale_w3))
 
     # ---------- 4. Priority 相同 ----------
@@ -418,9 +402,8 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
             continue
         names = "、".join(f"『{_name_of(mods, k)}』" for k in keys)
         add("dup_priority", "warn",
-            f"加载顺序重复：{p}",
-            f"{names} 的 Priority 都是 {p}。谁先加载不确定，同名文件谁覆盖谁看运气。"
-            f"给它们改成不同的数字就好。",
+            i18n.t("conf.dup_priority_title", p=p),
+            i18n.t("conf.dup_priority_detail", names=names, p=p),
             keys)
 
     # ---------- 5. 结构可疑 ----------
@@ -432,9 +415,8 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
         has_bin = (d / "bin").is_dir()
         if not has_content and not has_bin:
             add("empty_mod", "warn",
-                f"『{m.name}』里没有 content 文件夹",
-                "巫师3 的 mod 至少要有 content 目录（里面有 bundle 或 scripts）。"
-                "这个文件夹可能是解压层级错了，游戏不会加载它。",
+                i18n.t("conf.empty_mod_title", name=m.name),
+                i18n.t("conf.empty_mod_detail"),
                 [m.key])
         elif has_content:
             bundles = 0
@@ -444,8 +426,8 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
                     break
             if bundles == 0 and not m.has_scripts and not m.w3strings:
                 add("no_payload", "warn",
-                    f"『{m.name}』里找不到 .bundle 或脚本",
-                    "有 content 目录但里面没有游戏能读的内容，可能是没装全。",
+                    i18n.t("conf.no_payload_title", name=m.name),
+                    i18n.t("conf.no_payload_detail"),
                     [m.key])
 
     stats = {

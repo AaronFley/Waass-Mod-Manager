@@ -40,6 +40,8 @@ import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from core import i18n
+
 # Script Merger 的目录名是写死的
 MERGER_DIR = "Merger"
 EXE_NAMES = ("WitcherScriptMerger.exe", "ScriptMerger.exe")
@@ -78,7 +80,7 @@ def set_exe(path: str | Path) -> Path:
 
     p = Path(str(path)).expanduser()
     if not p.is_file():
-        raise FileNotFoundError(f"这个文件不存在：{p}")
+        raise FileNotFoundError(i18n.t("mrg.exe_missing", path=p))
     cfg = load_config()
     cfg["merger_exe"] = str(p)
     save_config(cfg)
@@ -361,15 +363,14 @@ def merged_state(root: Path, inv: dict, settings) -> dict:
 
     if not out["entry"]:
         out["ok"] = False
-        out["problem"] = (f"『{name}』没在 mods.settings 里登记，合并结果不会生效 —— "
-                          "源 mod 会把它盖掉（游戏会报找不到函数）")
+        out["problem"] = i18n.t("mrg.not_registered", name=name)
     elif not out["enabled"]:
         out["ok"] = False
-        out["problem"] = f"『{name}』被禁用了，合并结果不会生效"
+        out["problem"] = i18n.t("mrg.disabled", name=name)
     elif not out["is_min"]:
         out["ok"] = False
-        out["problem"] = (f"『{name}』的 Priority 是 {out['priority']}，"
-                          f"不比别的 mod 靠前（最小 {out['min_other']}）—— 合并结果会被盖掉")
+        out["problem"] = i18n.t("mrg.priority", name=name, prio=out["priority"],
+                                minp=out["min_other"])
     return out
 
 

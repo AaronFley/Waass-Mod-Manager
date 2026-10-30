@@ -18,6 +18,8 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import i18n
+
 # ---------------- 解压工具 ----------------
 
 _BANDIZIP = [
@@ -104,7 +106,9 @@ def _extract_zip(archive: Path, dest: Path) -> None:
             with zf.open(info) as src, open(_long(target), "wb") as out:
                 shutil.copyfileobj(src, out, 1 << 20)
     if skipped:
-        raise ArchiveError(f"压缩包内有 {len(skipped)} 个不安全路径，已跳过：{skipped[:3]}")
+        raise ArchiveError(i18n.tn(
+            "arc.unsafe_one", "arc.unsafe_many", len(skipped),
+            names=str(skipped[:3])))
 
 
 class ArchiveError(RuntimeError):
@@ -123,8 +127,7 @@ def _extract_external(archive: Path, dest: Path) -> None:
             un = _first_existing(_UNRAR)
             if not un or archive.suffix.lower() != ".rar":
                 raise ArchiveError(
-                    f"没有能解开 {archive.suffix} 的工具。装一个 Bandizip 或 7-Zip 即可，"
-                    "或者把 mod 包重新压成 zip。"
+                    i18n.t("arc.no_tool", suffix=archive.suffix)
                 )
             cmd = [str(un), "x", "-y", str(archive), str(dest) + os.sep]
 
@@ -138,16 +141,17 @@ def _extract_external(archive: Path, dest: Path) -> None:
         creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0), startupinfo=si,
     )
     if proc.returncode not in (0, 1):                  # UnRAR 用 1 表示"有警告但成功"
-        raise ArchiveError(f"解压失败（{archive.suffix}）：{(proc.stderr or proc.stdout)[:300]}")
+        raise ArchiveError(i18n.t("arc.extract_failed", suffix=archive.suffix,
+                                  detail=(proc.stderr or proc.stdout)[:300]))
 
 
 def extract(archive: str | Path, dest: str | Path | None = None) -> tuple[Path, bool]:
     """把压缩包解到暂存目录。返回 (暂存目录, 是否为临时目录)。"""
     src = Path(archive)
     if not src.is_file():
-        raise ArchiveError(f"找不到文件：{src}")
+        raise ArchiveError(i18n.t("arc.file_not_found", path=src))
     if not can_handle(src.suffix):
-        raise ArchiveError(f"暂不支持 {src.suffix} 格式")
+        raise ArchiveError(i18n.t("arc.unsupported", suffix=src.suffix))
 
     temp = dest is None
     out = Path(tempfile.mkdtemp(prefix="waass_stage_")) if temp else Path(dest)
@@ -193,7 +197,7 @@ class InstallPlan:
     bin_binaries: list[str] = field(default_factory=list)   # dll / ini 之类，高危
     has_settings: bool = False
     ignored: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
+    warnings: list[str | dict] = field(default_factory=list)
 
     @property
     def risk(self) -> str:
@@ -212,18 +216,23 @@ class InstallPlan:
     def summary(self) -> str:
         bits = []
         if self.mod_folders:
-            bits.append(f"{len(self.mod_folders)} 个 mod 文件夹")
+            bits.append(i18n.tn("arc.sum_mods_one", "arc.sum_mods_many",
+                                len(self.mod_folders)))
         if self.dlc_folders:
-            bits.append(f"{len(self.dlc_folders)} 个 DLC")
+            bits.append(i18n.tn("arc.sum_dlc_one", "arc.sum_dlc_many",
+                                len(self.dlc_folders)))
         if self.menu_xmls:
-            bits.append(f"{len(self.menu_xmls)} 个菜单文件")
+            bits.append(i18n.tn("arc.sum_menu_one", "arc.sum_menu_many",
+                                len(self.menu_xmls)))
         if self.bin_configs:
-            bits.append(f"{len(self.bin_configs)} 个游戏配置文件")
+            bits.append(i18n.tn("arc.sum_configs_one", "arc.sum_configs_many",
+                                len(self.bin_configs)))
         if self.bin_binaries:
-            bits.append(f"{len(self.bin_binaries)} 个游戏目录文件")
+            bits.append(i18n.tn("arc.sum_bin_one", "arc.sum_bin_many",
+                                len(self.bin_binaries)))
         if self.has_settings:
             bits.append("mods.settings")
-        return "、".join(bits) or "没认出任何 mod 内容"
+        return "、".join(bits) or i18n.t("arc.sum_none")
 
 
 def _subdirs(p: Path) -> list[Path]:
@@ -292,10 +301,10 @@ def _is_dlc_name(name: str) -> bool:
 def _norm_mod_name(name: str) -> tuple[str, str]:
     """返回 (可用文件夹名, 提示)。巫师3 只认 mod 开头的文件夹。"""
     if name.startswith("~"):
-        return name, "这个 mod 是以禁用状态打进来的，装上后仍是禁用"
+        return name, i18n.t("arc.disabled_hint")
     if _is_mod_name(name):
         return name, ""
-    return "mod_" + name, f"文件夹名「{name}」不以 mod 开头，改成 mod_{name} 才能被游戏加载"
+    return "mod_" + name, i18n.t("arc.rename_hint", name=name, fixed="mod_" + name)
 
 
 def build_plan(staging: str | Path, game_root: str | Path | None = None) -> InstallPlan:
@@ -361,11 +370,14 @@ def build_plan(staging: str | Path, game_root: str | Path | None = None) -> Inst
                 plan.bin_binaries.append(rel)
 
     if plan.bin_binaries:
-        plan.warnings.append(
-            f"这个包会往游戏程序目录写 {len(plan.bin_binaries)} 个文件"
-            f"（如 {Path(plan.bin_binaries[0]).name}）。"
-            "这类是插件型 mod，装错会导致游戏起不来，安装前请确认它对应哪个游戏版本。"
-        )
+        # 跨端契约：前端不再按中文文本匹配这条警告，改认 code。
+        # 其余 warnings 仍是纯字符串，只有这一条是 {"code", "message"} dict。
+        plan.warnings.append({
+            "code": "inside_game_bin",
+            "message": i18n.tn(
+                "arc.bin_one", "arc.bin_many", len(plan.bin_binaries),
+                name=Path(plan.bin_binaries[0]).name),
+        })
 
     # 2. 松散放着的 modXXX / dlcXXX 目录
     if not mods_dir.is_dir() or not dlc_dir.is_dir():
@@ -394,7 +406,7 @@ def build_plan(staging: str | Path, game_root: str | Path | None = None) -> Inst
     if settings.is_file():
         plan.has_settings = True
         add(settings, "mods.settings", "settings")
-        plan.warnings.append("包里带了 mods.settings，安装时会合并进你现有的配置，不会覆盖")
+        plan.warnings.append(i18n.t("arc.settings_note"))
 
     # 4. 认不出来的东西
     for f in root.iterdir() if root.is_dir() else []:
@@ -405,15 +417,12 @@ def build_plan(staging: str | Path, game_root: str | Path | None = None) -> Inst
             elif low == "mods.settings":
                 continue
             elif f.suffix.lower() in SUPPORTED_EXT:
-                plan.ignored.append(f.name + "（压缩包里的压缩包，没解）")
+                plan.ignored.append(i18n.t("arc.nested_archive", name=f.name))
             else:
                 plan.ignored.append(f.name)
 
     if not plan.entries:
-        plan.warnings.append(
-            "没认出 mod 结构。这个包可能是手动安装型（要求你自己挑文件），"
-            "可以把它解压后手动放进 mods 目录，或者告诉我它长什么样。"
-        )
+        plan.warnings.append(i18n.t("arc.no_structure"))
 
     # 去重：同一目标只留一条
     seen: dict[str, PlanEntry] = {}

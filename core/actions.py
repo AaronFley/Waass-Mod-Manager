@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import merger, safety
+from . import i18n, merger, safety
 from .paths import game_layout
 from .settings_ini import SettingsFile
 
@@ -54,18 +54,19 @@ def set_enabled(root: Path, key: str, enabled: bool) -> dict:
     settings_path = lay["user_config"] / "mods.settings"
     folder = _resolve_folder(lay["mods"], key)
     if folder is None:
-        raise FileNotFoundError(f"找不到 mod 文件夹：{key}")
+        raise FileNotFoundError(i18n.t("act.folder_missing", key=key))
 
     target = folder.with_name(key if enabled else "~" + key)
     safety.assert_writable(settings_path, folder, target)
 
-    op = safety.Operation(f"{'启用' if enabled else '禁用'} {key}")
+    op = safety.Operation(
+        i18n.t("act.op_enable" if enabled else "act.op_disable", name=key))
 
     renamed = False
     if folder.name != target.name:
         if target.exists():
             raise FileExistsError(
-                f"『{target.name}』已经存在，没法把 {folder.name} 改过去，请手动处理")
+                i18n.t("act.target_exists", target=target.name, folder=folder.name))
         op.record_rename(folder, target)
         folder.rename(target)
         renamed = True
@@ -108,7 +109,7 @@ def set_enabled_many(root: Path, keys: list[str], enabled: bool) -> dict:
     """
     keys = [str(k).strip() for k in keys if str(k).strip()]
     if not keys:
-        raise ValueError("没有选中任何模组")
+        raise ValueError(i18n.t("act.no_keys"))
     seen: set[str] = set()
     uniq: list[str] = []
     for k in keys:
@@ -124,18 +125,20 @@ def set_enabled_many(root: Path, keys: list[str], enabled: bool) -> dict:
     for key in uniq:
         folder = _resolve_folder(lay["mods"], key)
         if folder is None:
-            raise FileNotFoundError(f"找不到 mod 文件夹：{key}")
+            raise FileNotFoundError(i18n.t("act.folder_missing", key=key))
         dst = folder.with_name(key if enabled else "~" + key)
         if folder.name != dst.name and dst.exists():
             raise FileExistsError(
-                f"『{dst.name}』已经存在，没法把 {folder.name} 改过去，请手动处理")
+                i18n.t("act.target_exists", target=dst.name, folder=folder.name))
         plan.append((key, folder))
 
     safety.assert_writable(
         settings_path,
         *[p for k, f in plan for p in (f, f.with_name(k if enabled else "~" + k))])
 
-    op = safety.Operation(f"{'启用' if enabled else '禁用'} {len(plan)} 个模组")
+    op = safety.Operation(
+        i18n.t("act.op_enable_many" if enabled else "act.op_disable_many",
+               n=len(plan)))
 
     changed: list[str] = []
     renamed = 0
@@ -183,7 +186,8 @@ def set_priority(root: Path, key: str, priority: int) -> dict:
     settings_path = lay["user_config"] / "mods.settings"
     safety.assert_writable(settings_path)
     settings = SettingsFile.load(settings_path)
-    op = safety.Operation(f"调整顺序 {key} → {priority}")
+    op = safety.Operation(
+        i18n.t("act.op_priority", key=key, priority=priority))
     settings.bump_priority(key, int(priority))
     merged_fixed = _ensure_merged_entry(root, settings)
     op.backup(settings_path)
@@ -212,29 +216,30 @@ def reorder(root: Path, keys: list[str], prios: list[int] | None = None) -> dict
     # 静默成功是最坏的结果：用户以为排好了。
     missing = [k for k in keys if _resolve_folder(lay["mods"], k) is None]
     if missing:
-        raise ValueError(
-            "这些模组已经不在 mods 目录里了：" + "、".join(missing[:3])
-            + ("…" if len(missing) > 3 else ""))
+        raise ValueError(i18n.t(
+            "act.missing_folders",
+            names="、".join(missing[:3]) + ("…" if len(missing) > 3 else "")))
 
     if prios is None:
         nums = [(i + 1) * 10 for i in range(len(keys))]
     else:
         if len(prios) != len(keys):
-            raise ValueError("prios 和 keys 数量对不上")
+            raise ValueError(i18n.t("act.prio_count_mismatch"))
         nums = []
         for p in prios:
             try:
                 n = int(p)
             except (TypeError, ValueError):
-                raise ValueError(f"优先级不是整数：{p!r}") from None
+                raise ValueError(i18n.t("act.prio_not_int", value=repr(p))) from None
             if n < 0:
-                raise ValueError("优先级不能是负数")
+                raise ValueError(i18n.t("act.prio_negative"))
             nums.append(n)
         if len(set(nums)) != len(nums):
-            raise ValueError("优先级有重复，等于没排开")
+            raise ValueError(i18n.t("act.prio_dup"))
 
     settings = SettingsFile.load(settings_path)
-    op = safety.Operation(f"重排 {len(keys)} 个 mod 的加载顺序")
+    op = safety.Operation(
+        i18n.t("act.op_reorder", n=len(keys)))
     for key, prio in zip(keys, nums):
         settings.set_state(key, priority=prio)
     # 重排只覆盖可见 mod 的顺序，合订本不在列表里 —— 必须单独补位，

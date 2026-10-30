@@ -29,9 +29,10 @@ import re
 import shutil
 import time
 import xml.etree.ElementTree as ET
+from collections.abc import Mapping
 from pathlib import Path
 
-from . import w3strings
+from . import i18n, w3strings
 from .paths import DATA_DIR, game_layout
 
 JOBS_DIR = DATA_DIR / "translate"
@@ -99,12 +100,34 @@ CAT_MENU = "menu"      # 菜单项、分组名、署名行
 CAT_MOD = "mod_name"   # 模组自己的显示名
 CAT_ITEM = "item"      # 物品名（护甲 / 武器 / 套装）
 
-CAT_LABEL = {CAT_MENU: "菜单页", CAT_MOD: "模组名", CAT_ITEM: "物品名"}
-CAT_HINT = {
-    CAT_MENU: "菜单里能看到、能点的文字。改这些最安全，也是唯一默认勾选的。",
-    CAT_MOD: "模组在菜单里的名字。改动它可能让脚本认不出自己，默认不动。",
-    CAT_ITEM: "装备 / 物品的名字。它和存档、制作图纸里的名字是同一套，默认不动。",
-}
+class _CatText(Mapping):
+    """类别名 / 提示：取值时才过 i18n.t()。
+
+    语言在运行时可切换，模块顶层不许调 t()；但 server.py 直接消费这两个
+    映射，所以做成「键固定、值在读取时翻译」的只读映射，用法和 dict 一致。
+    """
+
+    def __init__(self, table: dict):
+        self._table = table
+
+    def __getitem__(self, k):
+        return i18n.t(self._table[k])
+
+    def __iter__(self):
+        return iter(self._table)
+
+    def __len__(self):
+        return len(self._table)
+
+
+CAT_LABEL = _CatText({
+    CAT_MENU: "loc.cat_menu", CAT_MOD: "loc.cat_mod_name", CAT_ITEM: "loc.cat_item",
+})
+CAT_HINT = _CatText({
+    CAT_MENU: "loc.cat_hint_menu",
+    CAT_MOD: "loc.cat_hint_mod",
+    CAT_ITEM: "loc.cat_hint_item",
+})
 CAT_DEFAULT = (CAT_MENU,)
 
 _POSSESSIVE = re.compile(r"['’]s\s")
@@ -318,17 +341,18 @@ def inspect(root: Path, mods: list) -> list[dict]:
 
         readable = [f for f in files if f["ok"] and f["lang"] in _CN_LANGS]
         if took_over:
-            why = f"已手工汉化（改的是菜单 XML），语言表里 {stale_n} 条是过期残留"
+            why = i18n.t("loc.why_takeover", n=stale_n)
         elif todo or text_units:
-            why = f"还有 {todo} 条英文没翻" if todo else f"菜单里有 {text_units} 条英文"
+            why = (i18n.t("loc.why_todo", n=todo) if todo
+                   else i18n.t("loc.why_xml", n=text_units))
         elif not readable:
-            why = ("语言文件是加密的，读不出原文"
+            why = (i18n.t("loc.why_encrypted")
                    if any(f["lang"] in _CN_LANGS for f in files)
-                   else "没有中文语言文件")
+                   else i18n.t("loc.why_no_cn"))
         elif done:
-            why = "已经全中文了"
+            why = i18n.t("loc.why_done")
         else:
-            why = "没有需要翻的文字"
+            why = i18n.t("loc.why_nothing")
 
         out.append({
             "key": m.key,
@@ -419,21 +443,20 @@ def catalog(root: Path, mod_keys: list[str] | None = None) -> list[dict]:
         if not row["has_cn"]:
             if sc["cjk"]:
                 # 有中文，只是不在语言表里 —— 别误报成「缺中文」
-                blocked = "文字在脚本里，已经是中文"
-                note = "这个模组把菜单文字直接写在脚本里，语言表里没中文是正常的。"
+                blocked = i18n.t("loc.blocked_in_script")
+                note = i18n.t("loc.note_in_script")
             elif not (cnt.get(CAT_MENU, 0) + cnt.get(CAT_MOD, 0) + cnt.get(CAT_ITEM, 0)):
-                blocked = "没有需要翻的文字"
-                note = "语言表里没有中文表，但也没有待翻的菜单文字 —— 不用管它。"
+                blocked = i18n.t("loc.why_nothing")
+                note = i18n.t("loc.note_no_todo")
             else:
-                blocked = "没有中文语言表"
+                blocked = i18n.t("loc.blocked_no_cn")
         elif not any(f["ok"] and f["lang"] in _CN_LANGS for f in row["files"]):
-            blocked = "语言表是加密的，读不出原文"
-            note = "读不出原文只是我们看不见，不代表游戏里没中文 —— 别急着改它。"
+            blocked = i18n.t("loc.blocked_encrypted")
+            note = i18n.t("loc.note_encrypted")
         elif n_stale and not cnt.get(CAT_MENU, 0):
             # 有人手改过菜单 XML，界面文字已经是中文；语言表里剩下的是残留
-            blocked = "已手工汉化（改的是菜单 XML）"
-            note = (f"菜单文件里已经写成中文了，语言表里那 {n_stale} 条英文是被它取代掉的旧文本，"
-                    "界面上不再显示，不用再翻。")
+            blocked = i18n.t("loc.blocked_takeover")
+            note = i18n.t("loc.note_takeover", n=n_stale)
         out.append({
             "key": m.key,
             "name": m.name,
@@ -534,7 +557,7 @@ def _line_of(text: str, pos: int) -> str:
     snippet = text[start:end if end > 0 else len(text)].strip()
     if len(snippet) > 90:
         snippet = snippet[:87] + "…"
-    return f"第 {line} 行 · {snippet}"
+    return i18n.t("loc.line_no", line=line, snippet=snippet)
 
 
 def apply_xml(path: Path | str, mapping: dict[str, str],
@@ -687,10 +710,7 @@ def build_jobs(root: Path, mod_keys: list[str] | None = None,
         "version": 1,
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "game_root": str(root),
-        "note": ("把每条 items[].dst 填上中文再导回本程序即可。"
-                 "max 是原文的字节数，译文按 UTF-8 计算不能超过它"
-                 "（一个汉字 3 字节，room 是大概能放几个汉字），放不下的会被跳过。"
-                 "原文里的 <font ...> 之类的标签要原样保留，否则游戏里样式会丢。"),
+        "note": i18n.t("loc.job_note"),
         "items": items,
     }
 
@@ -706,13 +726,13 @@ def build_jobs(root: Path, mod_keys: list[str] | None = None,
 def load_jobs(path: Path | str) -> dict:
     p = Path(path)
     if not p.is_file():
-        raise FileNotFoundError(f"找不到这个文件：{p}")
+        raise FileNotFoundError(i18n.t("loc.file_missing", path=p))
     try:
         d = json.loads(p.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
-        raise ValueError(f"这不是有效的 JSON：{e}") from None
+        raise ValueError(i18n.t("loc.bad_json", err=e)) from None
     if not isinstance(d, dict) or d.get("kind") != "waass-translate":
-        raise ValueError("这不像本程序导出的翻译包（缺少 kind 标记）")
+        raise ValueError(i18n.t("loc.bad_kind"))
     return d
 
 
@@ -722,7 +742,7 @@ def apply_jobs(data: dict) -> dict:
 
     items = [it for it in (data.get("items") or []) if str(it.get("dst") or "").strip()]
     if not items:
-        return {"ok": False, "error": "没有任何一条填了译文", "changed": 0}
+        return {"ok": False, "error": i18n.t("loc.no_translations"), "changed": 0}
 
     by_file: dict[str, list[dict]] = {}
     for it in items:
@@ -742,7 +762,8 @@ def apply_jobs(data: dict) -> dict:
                 Path(p).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(tpl, p)
             else:
-                results.append({"file": path, "error": "文件和模板都不存在"})
+                results.append({"file": path,
+                                "error": i18n.t("loc.file_and_template_missing")})
                 continue
         safety.authorize_path(p)
         mapping = {r["src"]: r["dst"] for r in rows}

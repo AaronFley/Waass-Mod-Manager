@@ -20,7 +20,7 @@ from pathlib import Path
 from core.paths import (DATA_DIR, RES_DIR, detect_game_root, forget_detected,
                         game_layout, load_config, save_config)
 from core.scanner import scan
-from core import (actions, appinfo, conflicts, downloads, gamever, guard, identify,
+from core import (actions, appinfo, conflicts, downloads, gamever, guard, i18n, identify,
                   library, localize, localize_backup, localize_job, merger,
                   nexus_meta, picker, registry, safety,
                   saves, storage, track, translate, ui as ui_store, winwatch)
@@ -217,6 +217,18 @@ class State:
 STATE = State()
 
 
+def _i18n_script(lang: str) -> str:
+    """把当前语言的整份键表塞进首页，写成 JSON 字面量交给前端。
+
+    `</` 必须转义：文案里只要出现 `</script>` 这一段，浏览器就会当场收口，
+    后面全部变成页面上的乱码。这种 bug 只在某条文案恰好含标签时出现，
+    测不到、也想不到，转义是唯一稳的做法。
+    """
+    payload = {"lang": lang, "strings": i18n.strings()}
+    raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    return raw.replace("</", "<\\/")
+
+
 def _json(data, status=200):
     return status, "application/json; charset=utf-8", json.dumps(
         data, ensure_ascii=False).encode("utf-8")
@@ -404,6 +416,11 @@ class Handler(BaseHTTPRequestHandler):
             LIFECYCLE["bye_at"] = 0.0
             html = (WEB / "templates" / "index.html").read_text(encoding="utf-8")
             html = html.replace("%%WAASS_TOKEN%%", TOKEN)
+            # 语言和整份键表在这里落地。键表内联而不是让前端再发一个请求：
+            # 静态文案的填充在脚本一加载就跑，晚一步就会先闪一遍中文。
+            lang = i18n.current()
+            html = html.replace("%%WAASS_HTML_LANG%%", i18n.HTML_LANG.get(lang, "en"))
+            html = html.replace("%%WAASS_I18N%%", _i18n_script(lang))
             return self._send(200, "text/html; charset=utf-8", html.encode("utf-8"))
 
         if path.startswith("/static/"):
@@ -543,7 +560,7 @@ class Handler(BaseHTTPRequestHandler):
             with STATE.lock:
                 res = STATE.scan_result
             if root is None or res is None:
-                return self._send(*_json({"mods": [], "error": "还没扫描到 mod"}, 400))
+                return self._send(*_json({"mods": [], "error": i18n.t("srv.no_scan_yet")}, 400))
             try:
                 rows = localize.inspect(root, res.visible_mods())
             except Exception as e:                   # noqa: BLE001
@@ -561,7 +578,7 @@ class Handler(BaseHTTPRequestHandler):
             with STATE.lock:
                 res = STATE.scan_result
             if root is None or res is None:
-                return self._send(*_json({"error": "还没扫描到 mod"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.no_scan_yet")}, 400))
             try:
                 rows = localize.catalog(root, [m.key for m in res.visible_mods()])
             except Exception as e:                   # noqa: BLE001
@@ -609,7 +626,7 @@ class Handler(BaseHTTPRequestHandler):
         except (TypeError, ValueError):
             length = 0
         if length < 0 or length > 64 * 1024 * 1024:
-            return self._send(*_json({"error": "请求体过大"}, 413))
+            return self._send(*_json({"error": i18n.t("srv.body_too_large")}, 413))
         raw = self.rfile.read(length) if length else b""
         try:
             body = json.loads(raw) if raw else {}
@@ -634,6 +651,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(*_json({"ok": True, "ms": int((time.time() - t0) * 1000)}))
 
         if path == "/api/config":
+            if "lang" in body:
+                # 切界面语言。只写 config.json 的 lang 一个键，别的配置原样留着。
+                # 前端收到 200 之后自己 location.reload()，这边不用管重绘。
+                i18n.save_pref(str(body.get("lang") or "auto"))
+                return self._send(*_json({"ok": True, "lang": i18n.current(),
+                                          "config": load_config()}))
             if body.get("redetect"):
                 # 用户点了空态里那个「重新查找」：丢掉探测缓存，按注册表/库清单
                 # 从头再走一遍（他可能刚装完游戏、或者刚把 Steam 库加到这块盘）。
@@ -647,7 +670,7 @@ class Handler(BaseHTTPRequestHandler):
             if body.get("game_root"):
                 cand = Path(body["game_root"])
                 if not (cand / "bin").is_dir():
-                    return self._send(*_json({"error": "这不是游戏根目录（找不到 bin 文件夹）"}, 400))
+                    return self._send(*_json({"error": i18n.t("srv.not_game_root")}, 400))
                 cfg["game_root"] = str(cand)
                 save_config(cfg)
                 STATE.refresh()
@@ -677,7 +700,7 @@ class Handler(BaseHTTPRequestHandler):
                     res = library.auto_group_by_category(
                         res.visible_mods() if res else [])
                 else:
-                    return self._send(*_json({"error": f"未知操作：{act}"}, 400))
+                    return self._send(*_json({"error": i18n.t("srv.unknown_action", act=act)}, 400))
             except (ValueError, KeyError) as e:
                 return self._send(*_json({"error": str(e)}, 400))
             return self._send(*_json(res))
@@ -687,7 +710,7 @@ class Handler(BaseHTTPRequestHandler):
             with STATE.lock:
                 res = STATE.scan_result
             if root is None or res is None:
-                return self._send(*_json({"error": "还没扫描到 mod"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.no_scan_yet")}, 400))
             keys = body.get("mods") or None
             try:
                 jobs = localize.build_jobs(root, [str(k) for k in keys] if keys else None)
@@ -705,7 +728,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 if not data:
                     if not fpath:
-                        return self._send(*_json({"error": "没有译文来源"}, 400))
+                        return self._send(*_json({"error": i18n.t("srv.no_translation_source")}, 400))
                     data = localize.load_jobs(fpath)
             except (FileNotFoundError, ValueError) as e:
                 return self._send(*_json({"error": str(e)}, 400))
@@ -718,7 +741,7 @@ class Handler(BaseHTTPRequestHandler):
             except safety.GameRunning as e:
                 return self._send(*_json({"error": str(e)}, 409))
             except guard.WriteDenied as e:
-                return self._send(*_json({"error": f"写保护拦下了：{e}"}, 403))
+                return self._send(*_json({"error": i18n.t("srv.write_denied", err=e)}, 403))
             except Exception as e:                   # noqa: BLE001
                 return self._send(*_json({"error": f"{type(e).__name__}: {e}"}, 500))
             if res.get("changed"):
@@ -728,10 +751,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/localize/run":
             root = STATE.game_root()
             if root is None:
-                return self._send(*_json({"error": "还没扫描到 mod"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.no_scan_yet")}, 400))
             keys = [str(k) for k in (body.get("mods") or [])]
             if not keys:
-                return self._send(*_json({"error": "先勾选要汉化的模组"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.pick_mods_first")}, 400))
             cats = body.get("cats")
             try:
                 job = localize_job.start(root, keys,
@@ -760,7 +783,7 @@ class Handler(BaseHTTPRequestHandler):
             except safety.GameRunning as e:
                 return self._send(*_json({"error": str(e)}, 409))
             except guard.WriteDenied as e:
-                return self._send(*_json({"error": f"写保护拦下了：{e}"}, 403))
+                return self._send(*_json({"error": i18n.t("srv.write_denied", err=e)}, 403))
             except ValueError as e:
                 return self._send(*_json({"error": str(e)}, 400))
             except Exception as e:                   # noqa: BLE001
@@ -773,14 +796,14 @@ class Handler(BaseHTTPRequestHandler):
             root = STATE.game_root()
             mode = str(body.get("mode") or "orig")
             if mode not in ("orig", "hist"):
-                return self._send(*_json({"error": "mode 只能是 orig 或 hist"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.bad_mode")}, 400))
             try:
                 res = localize_job.restore(body.get("record") or None, mode=mode,
                                            force=bool(body.get("force")), root=root)
             except safety.GameRunning as e:
                 return self._send(*_json({"error": str(e)}, 409))
             except guard.WriteDenied as e:
-                return self._send(*_json({"error": f"写保护拦下了：{e}"}, 403))
+                return self._send(*_json({"error": i18n.t("srv.write_denied", err=e)}, 403))
             except Exception as e:                   # noqa: BLE001
                 return self._send(*_json({"error": f"{type(e).__name__}: {e}"}, 500))
             if res.get("restored"):
@@ -810,7 +833,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/localize/forget":
             # 只有用户明确点「删掉汉化备份」才会到这里
             if not body.get("confirm"):
-                return self._send(*_json({"error": "需要明确确认"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.confirm_required")}, 400))
             return self._send(*_json(localize_backup.drop_all(confirm=True)))
 
         if path == "/api/track":
@@ -829,7 +852,7 @@ class Handler(BaseHTTPRequestHandler):
                     res = track.set_ignored(str(body.get("key") or ""),
                                             bool(body.get("on", True)))
                 else:
-                    return self._send(*_json({"error": f"未知操作：{act}"}, 400))
+                    return self._send(*_json({"error": i18n.t("srv.unknown_action", act=act)}, 400))
             except ValueError as e:
                 return self._send(*_json({"error": str(e)}, 400))
             STATE.refresh()
@@ -867,7 +890,7 @@ class Handler(BaseHTTPRequestHandler):
                     mods = list(STATE.scan_result.mods) if STATE.scan_result else []
                 ids = [m.nexus_id for m in mods if m.nexus_id]
             if not isinstance(ids, list):
-                return self._send(*_json({"error": "ids 应该是名单"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.ids_must_be_list")}, 400))
             res = nexus_meta.refresh([str(x) for x in ids],
                                      with_cover=bool(body.get("cover", True)),
                                      force=bool(body.get("force")))
@@ -880,7 +903,7 @@ class Handler(BaseHTTPRequestHandler):
             key = str(body.get("key") or "").strip()
             mod_id = str(body.get("mod_id") or "").strip()
             if not key or not mod_id.isdigit():
-                return self._send(*_json({"error": "缺少 mod 或 ID"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.missing_mod_or_id")}, 400))
             try:
                 track.set_manual(key, mod_id)
             except ValueError as e:
@@ -951,14 +974,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/open-url":
             url = str(body.get("url") or "")
             if not re.match(r"^https://(www\.)?nexusmods\.com/", url):
-                return self._send(*_json({"error": "只允许打开 Nexus 的链接"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.only_nexus_links")}, 400))
             os.startfile(url)                        # noqa: S606 已限定域名
             return self._send(*_json({"ok": True}))
 
         if path == "/api/mods/toggle":
             root = STATE.game_root()
             if root is None:
-                return self._send(*_json({"error": "未找到游戏目录"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.game_root_not_found")}, 400))
             key = str(body.get("key") or "")
             enabled = bool(body.get("enabled"))
             try:
@@ -973,10 +996,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/mods/batch_toggle":
             root = STATE.game_root()
             if root is None:
-                return self._send(*_json({"error": "未找到游戏目录"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.game_root_not_found")}, 400))
             keys = body.get("keys")
             if not isinstance(keys, list) or not keys:
-                return self._send(*_json({"error": "没有选中任何模组"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.no_mods_selected")}, 400))
             enabled = bool(body.get("enabled"))
             try:
                 res = actions.set_enabled_many(
@@ -992,12 +1015,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/mods/priority":
             root = STATE.game_root()
             if root is None:
-                return self._send(*_json({"error": "未找到游戏目录"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.game_root_not_found")}, 400))
             key = str(body.get("key") or "")
             try:
                 prio = int(body.get("priority"))
             except (TypeError, ValueError):
-                return self._send(*_json({"error": "优先级必须是整数"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.priority_must_be_int")}, 400))
             try:
                 res = actions.set_priority(root, key, prio)
             except safety.GameRunning as e:
@@ -1008,13 +1031,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/reorder":
             root = STATE.game_root()
             if root is None:
-                return self._send(*_json({"error": "未找到游戏目录"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.game_root_not_found")}, 400))
             keys = body.get("keys") or []
             if not isinstance(keys, list) or not keys:
-                return self._send(*_json({"error": "顺序列表为空"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.empty_order_list")}, 400))
             prios = body.get("prios")
             if prios is not None and not isinstance(prios, list):
-                return self._send(*_json({"error": "prios 必须是数组"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.prios_must_be_array")}, 400))
             try:
                 res = actions.reorder(root, [str(k) for k in keys], prios)
             except ValueError as e:
@@ -1050,14 +1073,14 @@ class Handler(BaseHTTPRequestHandler):
                 # 只开目录不开文件：os.startfile 对可执行后缀会直接运行，
                 # 而这个路径来自前端参数，不能让它决定打开哪个文件。
                 if root is None:
-                    return self._send(*_json({"error": "未找到游戏目录"}, 400))
+                    return self._send(*_json({"error": i18n.t("srv.game_root_not_found")}, 400))
                 d = game_layout(root)["user_config"]
                 if not d.is_dir():
-                    return self._send(*_json({"error": "配置目录不存在"}, 404))
+                    return self._send(*_json({"error": i18n.t("srv.config_dir_missing")}, 404))
                 os.startfile(str(d))                 # noqa: S606 已限定为游戏配置目录
                 return self._send(*_json({"ok": True}))
             if root is None or not key:
-                return self._send(*_json({"error": "参数不全"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.missing_params")}, 400))
             lay = game_layout(root)
             # key 是前端传上来的文件夹名。不校验的话 `..\..\` 能跳出 mods，
             # 变成「打开机器上任意文件夹」—— 危害有限，但没有理由留着这个口子。
@@ -1065,7 +1088,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 mods_dir = lay["mods"].resolve()
             except OSError:
-                return self._send(*_json({"error": "mods 目录不可用"}, 404))
+                return self._send(*_json({"error": i18n.t("srv.mods_dir_unusable")}, 404))
             for cand in (lay["mods"] / key, lay["mods"] / ("~" + key)):
                 try:
                     inside = cand.resolve().parent == mods_dir
@@ -1076,19 +1099,18 @@ class Handler(BaseHTTPRequestHandler):
                 if cand.is_dir():
                     os.startfile(str(cand))       # noqa: S606 本地路径，已校验
                     return self._send(*_json({"ok": True}))
-            return self._send(*_json({"error": "文件夹不存在"}, 404))
+            return self._send(*_json({"error": i18n.t("srv.folder_not_found")}, 404))
 
         if path == "/api/merger/open":
             # 只启动，不代跑合并。改文件是 Script Merger 自己的事，
             # 我们既不知道它合并了什么，也不该替用户点那几下鼠标。
             root = STATE.game_root()
             if root is None:
-                return self._send(*_json({"error": "未找到游戏目录"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.game_root_not_found")}, 400))
             exe = merger.exe_path(root)
             if exe is None:
                 return self._send(*_json(
-                    {"error": "没找到 Script Merger。装在别处的话，"
-                              "在冲突检查里点「我已装好，指定位置」告诉程序它在哪。"},
+                    {"error": i18n.t("srv.merger_not_found")},
                     404))
             try:
                 safety.assert_writable()
@@ -1101,10 +1123,10 @@ class Handler(BaseHTTPRequestHandler):
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except OSError as e:
                 return self._send(*_json(
-                    {"error": f"启动失败：{e}。它可能需要 .NET 8 桌面运行时。"}, 500))
+                    {"error": i18n.t("srv.merger_start_failed", err=e)}, 500))
             conflicts.drop_cache()
             return self._send(*_json({"ok": True, "exe": str(exe),
-                                      "hint": "合并完成后回来点「重新检查」"}))
+                                      "hint": i18n.t("srv.merger_recheck_hint")}))
 
         if path == "/api/merger/locate":
             # 装在别处的 Script Merger：让用户自己指一次 exe，记住它。
@@ -1112,7 +1134,7 @@ class Handler(BaseHTTPRequestHandler):
             # 全盘找一分钟起步，而且盘上可能有已经废弃的旧副本。
             root = STATE.game_root()
             if root is None:
-                return self._send(*_json({"error": "未找到游戏目录"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.game_root_not_found")}, 400))
             if body.get("clear"):
                 merger.clear_exe()
                 conflicts.drop_cache()
@@ -1120,13 +1142,13 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 picked = picker.pick("exe")
             except OSError as e:
-                return self._send(*_json({"error": f"打不开文件选择框：{e}"}, 500))
+                return self._send(*_json({"error": i18n.t("srv.picker_open_failed", err=e)}, 500))
             if not picked:
                 return self._send(*_json({"ok": False, "cancelled": True}))
             p = Path(picked)
             name = p.name.lower()
             if not name.endswith(".exe"):
-                return self._send(*_json({"error": "要选 Script Merger 的 .exe"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.pick_merger_exe")}, 400))
             # 不硬性要求文件名完全匹配（改名/汉化版都有），但提醒一下，
             # 免得用户随手挑了个别的程序，后面「打开」按钮点开一片空白。
             suspicious = not any(k in name for k in ("merger", "script"))
@@ -1144,12 +1166,12 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/api/preview", "/api/install"):
             root = STATE.game_root()
             if root is None:
-                return self._send(*_json({"error": "未找到游戏目录"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.game_root_not_found")}, 400))
             archive = str(body.get("archive") or "").strip().strip('"')
             if not archive:
-                return self._send(*_json({"error": "没给压缩包路径"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.no_archive_path")}, 400))
             if not Path(archive).is_file():
-                return self._send(*_json({"error": f"文件不存在：{archive}"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.archive_not_found", path=archive)}, 400))
             try:
                 if path == "/api/preview":
                     res = installer.preview(archive, root)
@@ -1169,7 +1191,7 @@ class Handler(BaseHTTPRequestHandler):
             except safety.GameRunning as e:
                 return self._send(*_json({"error": str(e)}, 409))
             except guard.WriteDenied as e:
-                return self._send(*_json({"error": f"写保护拦下了这次操作：{e}"}, 403))
+                return self._send(*_json({"error": i18n.t("srv.write_denied_action", err=e)}, 403))
             except Exception as e:                       # noqa: BLE001 解压类错误统一露出
                 return self._send(*_json({"error": f"{type(e).__name__}: {e}"}, 500))
             return self._send(*_json(res))
@@ -1177,10 +1199,10 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/api/uninstall", "/api/restore"):
             root = STATE.game_root()
             if root is None:
-                return self._send(*_json({"error": "未找到游戏目录"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.game_root_not_found")}, 400))
             pkg_id = str(body.get("package_id") or "")
             if not pkg_id:
-                return self._send(*_json({"error": "没给包 id"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.no_package_id")}, 400))
             try:
                 res = (installer.uninstall if path == "/api/uninstall" else installer.restore)(
                     pkg_id, root)
@@ -1189,14 +1211,14 @@ class Handler(BaseHTTPRequestHandler):
             except safety.GameRunning as e:
                 return self._send(*_json({"error": str(e)}, 409))
             except guard.WriteDenied as e:
-                return self._send(*_json({"error": f"写保护拦下了这次操作：{e}"}, 403))
+                return self._send(*_json({"error": i18n.t("srv.write_denied_action", err=e)}, 403))
             STATE.refresh()
             return self._send(*_json(res))
 
         if path == "/api/uninstall-all":
             root = STATE.game_root()
             if root is None:
-                return self._send(*_json({"error": "未找到游戏目录"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.game_root_not_found")}, 400))
             try:
                 res = installer.uninstall_all(root)
             except safety.GameRunning as e:
@@ -1216,7 +1238,7 @@ class Handler(BaseHTTPRequestHandler):
                 elif act == "set_game_root":
                     cand = Path(str(body.get("path") or ""))
                     if not (cand / "bin").is_dir():
-                        return self._send(*_json({"error": "这不是游戏根目录（找不到 bin 文件夹）"}, 400))
+                        return self._send(*_json({"error": i18n.t("srv.not_game_root")}, 400))
                     cfg = load_config()
                     cfg["game_root"] = str(cand)
                     save_config(cfg)
@@ -1232,7 +1254,7 @@ class Handler(BaseHTTPRequestHandler):
                     save_config(cfg)
                     res = {"ok": True, "config": cfg}
                 else:
-                    return self._send(*_json({"error": f"未知操作：{act}"}, 400))
+                    return self._send(*_json({"error": i18n.t("srv.unknown_action", act=act)}, 400))
             except FileNotFoundError as e:
                 return self._send(*_json({"error": str(e)}, 400))
             except OSError as e:
@@ -1244,7 +1266,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 picked = _tk_dialog(kind)
             except Exception as e:                       # noqa: BLE001 没有 GUI 环境
-                return self._send(*_json({"error": f"打不开选择框（{e}），可以直接粘贴路径"}, 500))
+                return self._send(*_json({"error": i18n.t("srv.dialog_open_failed", err=e)}, 500))
             return self._send(*_json({"ok": True, "path": picked}))
 
         if path == "/api/ui/dismiss":
@@ -1260,7 +1282,7 @@ class Handler(BaseHTTPRequestHandler):
             elif kind == "upd":
                 ui_store.forget_upd(str(body.get("sig") or ""))
             else:
-                return self._send(*_json({"error": "未知的提示类型"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.unknown_dismiss_kind")}, 400))
             return self._send(*_json({"ok": True, "ui": _banner_state()}))
 
         if path == "/api/localize/peek":
@@ -1302,7 +1324,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/storage/clean":
             ids = body.get("ids")
             if ids is not None and not isinstance(ids, list):
-                return self._send(*_json({"error": "ids 应该是名单"}, 400))
+                return self._send(*_json({"error": i18n.t("srv.ids_must_be_list")}, 400))
             try:
                 res = storage.clean([str(x) for x in (ids or [])],
                                     only_safe=bool(body.get("safe_only")))
@@ -1441,6 +1463,7 @@ def _watch_close_loop(httpd: ThreadingHTTPServer, grace: float = CLOSE_GRACE) ->
 
 
 def start_background(port: int = 0, watch_close: bool = False) -> tuple[ThreadingHTTPServer, int]:
+    i18n.bootstrap()          # 按 config.json 的 lang 定语言（缺省跟随系统）
     httpd = serve(port)
     t = threading.Thread(target=httpd.serve_forever, daemon=True)
     t.start()

@@ -80,6 +80,11 @@ def main() -> int:
 
     from core import guard, legacy, scanner, storage
 
+    # 必须在环境变量设好之后再 import i18n 并钉语言：提前 import 会把
+    # core.paths 的 DATA_DIR 钉在真实目录，写入闸门当场拒绝。
+    from core import i18n
+    i18n.set_lang("zh")   # 下面断言的是中文文案，别受系统语言影响
+
     rmmr = make_rmmr(game)
 
     print("\n[1] 第一次扫描：从外部管理器搬一次")

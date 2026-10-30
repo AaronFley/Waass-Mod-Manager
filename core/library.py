@@ -13,6 +13,7 @@ import time
 import uuid
 from datetime import datetime
 
+from . import i18n
 from .paths import DATA_DIR, load_config, save_config
 
 LIB_FILE = DATA_DIR / "library.json"
@@ -58,10 +59,10 @@ def groups() -> list[dict]:
 def create_group(name: str, members: list[str] | None = None) -> dict:
     name = _clean(name)
     if not name:
-        raise ValueError("分组名不能为空")
+        raise ValueError(i18n.t("lib.name_empty"))
     d = _load()
     if any(g["name"] == name for g in d["groups"]):
-        raise ValueError(f"已经有叫「{name}」的分组了")
+        raise ValueError(i18n.t("lib.group_exists", name=name))
     g = {
         "id": "g_" + uuid.uuid4().hex[:8],
         "name": name,
@@ -76,14 +77,14 @@ def create_group(name: str, members: list[str] | None = None) -> dict:
 def rename_group(gid: str, name: str) -> dict:
     name = _clean(name)
     if not name:
-        raise ValueError("分组名不能为空")
+        raise ValueError(i18n.t("lib.name_empty"))
     d = _load()
     for g in d["groups"]:
         if g["id"] == gid:
             g["name"] = name
             _save(d)
             return g
-    raise KeyError("找不到这个分组")
+    raise KeyError(i18n.t("lib.group_missing"))
 
 
 def delete_group(gid: str) -> dict:
@@ -112,7 +113,7 @@ def set_member(gid: str, key: str, on: bool) -> dict:
         g["members"] = sorted(m)
         _save(d)
         return {"ok": True, "group": g}
-    raise KeyError("找不到这个分组")
+    raise KeyError(i18n.t("lib.group_missing"))
 
 
 def members_of(gid: str) -> list[str]:
@@ -186,13 +187,15 @@ def index() -> dict:
     }
 
 
-def auto_group_by_category(mods: list, name: str = "按分类整理") -> dict:
+def auto_group_by_category(mods: list, name: str = "") -> dict:
     """一键按现有分类生成分组 —— 给不知道该怎么分的人一个起点。"""
     from .scanner import CAT_CN
 
+    name = name or i18n.t("lib.auto_group_name")
+
     buckets: dict[str, list[str]] = {}
     for m in mods:
-        label = CAT_CN.get(m.category or "", "未分类")
+        label = CAT_CN.get(m.category or "", i18n.t("lib.uncategorized"))
         buckets.setdefault(label, []).append(m.key)
 
     d = _load()

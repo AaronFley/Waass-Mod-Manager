@@ -9,13 +9,13 @@ let DRAG_KEY = null;
 const ordDirty = () => ORD.join('|') !== ORD_BASE;
 
 async function openOrderDialog() {
-  openModal('加载顺序', '<div class="upd-loading">正在读取…</div>', { wide: true });
+  openModal(T('ui.nav_order'), `<div class="upd-loading">${T('common.loading')}</div>`, { wide: true });
   if (!S.data?.scan) {
     try { await load(); } catch { /* 下面会提示 */ }
   }
   const mods = S.data?.scan?.mods || [];
   if (!mods.length) {
-    $('#modalBody').innerHTML = '<div class="pkg-hint">还没有扫描到模组。</div>';
+    $('#modalBody').innerHTML = `<div class="pkg-hint">${T('order.empty')}</div>`;
     return;
   }
   ORD_MODS = new Map(mods.map(m => [m.key, m]));
@@ -28,7 +28,7 @@ async function openOrderDialog() {
   // 关窗前提醒：拖完直接按 ✕ 会把改动悄悄丢掉（以前就是这样）
   guardModalClose(() => {
     if (!ordDirty()) return true;
-    return confirm('顺序改了但还没保存。\n\n关掉的话这些改动就丢了 —— 点「取消」回去点一下「保存顺序」。');
+    return confirm(T('order.confirm_close'));
   });
 
   renderOrder();
@@ -45,10 +45,10 @@ function renderOrder() {
         <svg viewBox="0 0 16 16"><path d="M6 4h.01M6 8h.01M6 12h.01M10 4h.01M10 8h.01M10 12h.01"></path></svg>
       </span>
       <span class="ord-name">${esc(name)}${sub ? `<em>${esc(sub)}</em>` : ''}</span>
-      <span class="ord-tag ${m.enabled ? 'is-on' : 'is-off'}">${m.enabled ? '已启用' : '已禁用'}</span>
+      <span class="ord-tag ${m.enabled ? 'is-on' : 'is-off'}">${m.enabled ? T('common.enabled') : T('common.disabled')}</span>
       <span class="ord-btns">
-        <button class="ord-mv" data-move="-1" title="上移" ${i === 0 ? 'disabled' : ''}>↑</button>
-        <button class="ord-mv" data-move="1" title="下移" ${i === ORD.length - 1 ? 'disabled' : ''}>↓</button>
+        <button class="ord-mv" data-move="-1" title="${T('order.move_up')}" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button class="ord-mv" data-move="1" title="${T('order.move_down')}" ${i === ORD.length - 1 ? 'disabled' : ''}>↓</button>
       </span>
     </div>`;
   }).join('');
@@ -59,22 +59,15 @@ function renderOrder() {
 
   $('#modalBody').innerHTML = `
     <div class="ord-hint">
-      越靠上越先加载，<b>同名文件撞车时排在前面（数字小）的那份生效</b>。
-      想让哪个模组说了算，就把它往上拖。拖动行，或点 ↑ ↓ 调整，
-      改完点「保存顺序」—— 会按 10、20、30… 写进 <code>mods.settings</code>，
-      也就是游戏的加载优先级。
-      <br>只有启用中的 ${on} 个模组真正互相影响，禁用的排在哪儿都无所谓。
-      这里显示的是<b>真实顺序</b>（禁用的一行不藏起来），主页「全部模组」把禁用的
-      排在最后只是看着顺眼，不改这里的数字。
-      ${hasMerge ? `<br>合订本（Script Merger 合并出来的那几个文件）固定排在最前，
-        不在这里参与排序 —— 它排第二就等于把合并结果作废。` : ''}
+      ${T('order.hint_html', { on: on })}
+      ${hasMerge ? `<br>${T('order.hint_merge')}` : ''}
     </div>
     <div class="ord-list" id="ordList">${rows}</div>
     <div class="ord-foot">
-      <button class="btn btn-primary btn-sm" id="ordSave">保存顺序</button>
-      <button class="btn btn-sm" id="ordReset">还原</button>
+      <button class="btn btn-primary btn-sm" id="ordSave">${T('order.btn_save')}</button>
+      <button class="btn btn-sm" id="ordReset">${T('order.btn_reset')}</button>
       <span class="ord-state ${dirty ? 'is-dirty' : ''}">
-        ${dirty ? '有改动还没保存 —— 直接关窗会丢' : '改动只在点「保存顺序」之后生效'}
+        ${dirty ? T('order.state_dirty') : T('order.state_clean')}
       </span>
     </div>`;
 
@@ -141,21 +134,21 @@ function bindOrder() {
   $('#ordSave').onclick = async () => {
     const btn = $('#ordSave');
     btn.disabled = true;
-    btn.textContent = '保存中…';
+    btn.textContent = T('order.saving');
     try {
       await api('/api/reorder', { keys: ORD });
       ORD_BASE = ORD.join('|');          // 保存成功，不再算「未保存」
       closeModal(true);
-      toast('加载顺序已保存', 3400, { label: '撤销', fn: undoNow });
+      toast(T('order.saved'), 3400, { label: T('order.undo'), fn: undoNow });
       await load();
     } catch (err) {
-      toast('保存失败：' + err.message, 4000);
+      toast(T('order.save_failed', { error: err.message }), 4000);
       btn.disabled = false;
-      btn.textContent = '保存顺序';
+      btn.textContent = T('order.btn_save');
     }
   };
   $('#ordReset').onclick = () => {
-    if (ordDirty() && !confirm('把顺序还原成打开时的样子？没保存的改动会丢。')) return;
+    if (ordDirty() && !confirm(T('order.confirm_reset'))) return;
     openOrderDialog();
   };
 }

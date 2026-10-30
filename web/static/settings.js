@@ -5,23 +5,23 @@ let SET = { config: {}, downloads: { dirs: [] } };
 let ABOUT = null;
 let STG = null;
 
-const DIR_KIND_LABEL = { system: '系统下载目录', custom: '已添加', suggested: '常用位置' };
-const RISK_LABEL = { safe: '随便删', caution: '删了少点方便', danger: '删了找不回' };
+const DIR_KIND_LABEL = () => ({ system: T('set.dir_kind_system'), custom: T('set.dir_kind_custom'), suggested: T('set.dir_kind_suggested') });
+const RISK_LABEL = () => ({ safe: T('set.risk_safe'), caution: T('set.risk_caution'), danger: T('set.risk_danger') });
 
 /* 使用说明：把 static/guide.html 读进来塞进弹窗。
    不单开浏览器窗口（--app 窗口没有地址栏，用户回不来），也不把九节正文
    硬塞进 JS 字符串里 —— 那样改文案要动代码。读不到就只少这一页，
    其余功能一概不受影响。 */
 async function openGuide() {
-  openModal('使用说明', '<div class="upd-loading">正在读取…</div>', { wide: true });
+  openModal(T('set.guide_title'), `<div class="upd-loading">${T('common.loading')}</div>`, { wide: true });
   try {
-    const r = await fetch('/static/guide.html', { cache: 'no-store' });
-    if (!r.ok) throw new Error('读不到说明书（' + r.status + '）');
+    const r = await fetch(`/static/${I18N_LANG === 'zh' ? 'guide.html' : 'guide.en.html'}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(T('set.guide_load_fail', { code: r.status }));
     $('#modalBody').innerHTML = await r.text();
     $('#modalBody').scrollTop = 0;
   } catch (e) {
     $('#modalBody').innerHTML =
-      `<div class="pkg-hint">${esc(e.message)}。这不影响其它功能。</div>`;
+      `<div class="pkg-hint">${T('set.guide_fail_hint', { msg: esc(e.message) })}</div>`;
   }
 }
 
@@ -43,7 +43,7 @@ async function openSettingsDialog() {
 
   const cfg = SET.config;
   const game = cfg.game_root || ABOUT?.game_root || S.data?.layout?.root
-    || (S.data?.game_found ? '（自动识别）' : '未设置');
+    || (S.data?.game_found ? T('set.auto_detected') : T('ui.unset'));
   const dirs = SET.downloads.dirs || [];
 
   const dirRows = dirs.map(d => `
@@ -51,13 +51,13 @@ async function openSettingsDialog() {
       <div class="set-main">
         <div class="set-name">
           ${esc(d.name)}
-          <span class="set-tag ${d.kind === 'system' ? 'is-system' : ''}">${DIR_KIND_LABEL[d.kind] || ''}</span>
-          ${d.exists ? '' : '<span class="set-tag is-missing">目录不见了</span>'}
+          <span class="set-tag ${d.kind === 'system' ? 'is-system' : ''}">${DIR_KIND_LABEL()[d.kind] || ''}</span>
+          ${d.exists ? '' : `<span class="set-tag is-missing">${T('set.dir_missing')}</span>`}
         </div>
         <div class="set-path">${esc(d.path)}</div>
       </div>
-      <span class="set-count">${d.archives || 0} 个包</span>
-      <button class="btn btn-sm" data-rmdir="${esc(d.path)}">移除</button>
+      <span class="set-count">${TN('set.archives_one', 'set.archives_many', d.archives || 0)}</span>
+      <button class="btn btn-sm" data-rmdir="${esc(d.path)}">${T('set.remove')}</button>
     </div>`).join('');
 
   const on = (k, dflt) => (cfg[k] === undefined ? dflt : !!cfg[k]);
@@ -67,118 +67,115 @@ async function openSettingsDialog() {
     <div class="stg-row">
       <div class="stg-main">
         <div class="stg-name">${esc(g.title)}
-          <span class="stg-risk is-${g.risk}">${RISK_LABEL[g.risk] || ''}</span>
+          <span class="stg-risk is-${g.risk}">${RISK_LABEL()[g.risk] || ''}</span>
         </div>
         <div class="stg-desc">${esc(g.desc)}</div>
       </div>
-      <span class="stg-size">${fmtSize(g.bytes)}<em>${g.files} 个文件</em></span>
-      ${g.actionable === false ? '' : `<button class="btn btn-sm" data-stg="${g.id}">清理</button>`}
+      <span class="stg-size">${fmtSize(g.bytes)}<em>${TN('set.files_one', 'set.files_many', g.files)}</em></span>
+      ${g.actionable === false ? '' : `<button class="btn btn-sm" data-stg="${g.id}">${T('set.clean')}</button>`}
     </div>`).join('');
 
-  openModal('设置', `
+  openModal(T('ui.settings'), `
     <div class="set">
 
       <div>
-        <div class="set-sec-title">游戏目录</div>
+        <div class="set-sec-title">${T('ui.game_dir')}</div>
         <div class="set-row">
           <div class="set-main">
-            <div class="set-name">巫师3 重制版</div>
+            <div class="set-name">${T('set.game_name')}</div>
             <div class="set-path">${esc(game)}</div>
           </div>
-          <button class="btn btn-sm" id="setGameDir">更改</button>
+          <button class="btn btn-sm" id="setGameDir">${T('ui.change')}</button>
         </div>
       </div>
 
       <div>
-        <div class="set-sec-title">下载目录 · 从这些地方找 mod 包</div>
+        <div class="set-sec-title">${T('set.downloads_title')}</div>
         <div class="pkg-hint" style="margin-top:-2px">
-          你平时在网页上下载的 mod 会存在这些目录里。装的时候不用再翻文件夹，
-          这里列出来的包可以直接点着装。默认已经找到系统下载目录。
+          ${T('set.downloads_hint')}
         </div>
-        <div id="setDirs">${dirRows || '<div class="pkg-hint">还没有任何下载目录。点下面「添加目录」。</div>'}</div>
+        <div id="setDirs">${dirRows || `<div class="pkg-hint">${T('set.dirs_empty')}</div>`}</div>
         <div class="set-actions" style="margin-top:8px">
-          <button class="btn btn-sm btn-primary" id="setAddDir">添加目录</button>
-          <button class="btn btn-sm" id="setPickDir">浏览选择…</button>
-          <button class="btn btn-sm btn-ghost" id="setResetDir">恢复默认</button>
+          <button class="btn btn-sm btn-primary" id="setAddDir">${T('set.add_dir')}</button>
+          <button class="btn btn-sm" id="setPickDir">${T('set.browse')}</button>
+          <button class="btn btn-sm btn-ghost" id="setResetDir">${T('set.restore_defaults')}</button>
         </div>
         <div class="inst-hint" style="margin-top:6px" id="setAddManualWrap">
-          也可以直接粘贴路径：<input id="setAddManual" class="inst-input" style="height:28px;margin-top:5px"
-            placeholder="例如 D:\\download\\nexusmods">
+          ${T('set.paste_path')}<input id="setAddManual" class="inst-input" style="height:28px;margin-top:5px"
+            placeholder="${T('set.paste_path_ph')}">
         </div>
       </div>
 
       <div>
-        <div class="set-sec-title">Nexus 资料</div>
+        <div class="set-sec-title">${T('set.nexus_section')}</div>
         <label class="set-check">
           <input type="checkbox" id="optNexusMeta" ${on('nexus_auto_meta', true) ? 'checked' : ''}>
-          <div>自动到 Nexus 查作者、封面、最新版本
-            <small>从文件名能认出 Nexus ID 就查得到。只读公开信息，不登录、不要 Key、不下载 mod 文件；
-            每个 mod 的资料存 7 天，过期才重查。关掉之后界面照样能用，只是版本和封面留空。</small></div>
+          <div>${T('set.nexus_auto_meta_label')}
+            <small>${T('set.nexus_auto_meta_hint')}</small></div>
         </label>
         <label class="set-check">
           <input type="checkbox" id="optNexusCover" ${on('nexus_auto_cover', true) ? 'checked' : ''}>
-          <div>顺便下载封面图<small>每张约 20~60 KB（只取缩略图）。关掉只省一点空间，卡片会用纯色底。</small></div>
+          <div>${T('set.nexus_cover_label')}<small>${T('set.nexus_cover_hint')}</small></div>
         </label>
         <div class="set-fixed">
-          已经查到 <b>${ABOUT?.nexus?.cached ?? 0}</b> 个模组的资料。
-          ${ABOUT?.nexus?.last_ok ? `上次成功：${esc(ABOUT.nexus.last_ok.replace('T', ' '))}` : ''}
-          ${ABOUT?.nexus?.last_error ? `<br><span class="muted">上次出错：${esc(ABOUT.nexus.last_error)}</span>` : ''}
+          ${T('set.nexus_cached', { n: ABOUT?.nexus?.cached ?? 0 })}
+          ${ABOUT?.nexus?.last_ok ? T('set.nexus_last_ok', { time: esc(ABOUT.nexus.last_ok.replace('T', ' ')) }) : ''}
+          ${ABOUT?.nexus?.last_error ? `<br><span class="muted">${T('set.nexus_last_error', { msg: esc(ABOUT.nexus.last_error) })}</span>` : ''}
         </div>
       </div>
 
       <div>
-        <div class="set-sec-title">存储与清理</div>
+        <div class="set-sec-title">${T('set.storage_section')}</div>
         <div class="stg-head">
           <div>
             <div class="stg-total">${fmtSize(STG?.total_bytes || 0)}</div>
-            <div class="stg-sub">数据目录总占用 · ${STG?.total_files || 0} 个文件</div>
+            <div class="stg-sub">${TN('set.storage_total_one', 'set.storage_total_many', STG?.total_files || 0)}</div>
           </div>
           <button class="btn btn-sm btn-primary" id="stgCleanSafe" ${(STG?.safe_bytes || 0) > 0 ? '' : 'disabled'}>
-            ${(STG?.safe_bytes || 0) > 0 ? '清理可再生的（' + fmtSize(STG.safe_bytes) + '）' : '已经很干净'}
+            ${(STG?.safe_bytes || 0) > 0 ? T('set.clean_safe_btn', { size: fmtSize(STG.safe_bytes) }) : T('set.already_clean')}
           </button>
         </div>
         <div class="set-path" title="${esc(STG?.data_dir || '')}">${esc(STG?.data_dir || '')}</div>
-        <div class="stg-list">${stgRows || '<div class="pkg-hint">现在没有可清理的东西，很干净。</div>'}</div>
+        <div class="stg-list">${stgRows || `<div class="pkg-hint">${T('set.storage_empty')}</div>`}</div>
         <div class="stg-core">
-          核心数据 ${fmtSize(STG?.core_bytes || 0)}：配置、Nexus 台账、分组、安装档案、存档备份、汉化原件。
-          这些是程序的大脑，任何清理都不会碰。
+          ${T('set.storage_core', { size: fmtSize(STG?.core_bytes || 0) })}
         </div>
       </div>
 
       <div>
-        <div class="set-sec-title">帮助</div>
+        <div class="set-sec-title">${T('set.help_section')}</div>
         <div class="set-row">
           <div class="set-main">
-            <div class="set-name">使用说明</div>
-            <div class="set-note">每一项功能怎么用、界面上的标记是什么意思。第一次用建议先扫一遍。</div>
+            <div class="set-name">${T('set.guide_title')}</div>
+            <div class="set-note">${T('set.guide_note')}</div>
           </div>
-          <button class="btn btn-sm btn-primary" id="setGuide">打开</button>
+          <button class="btn btn-sm btn-primary" id="setGuide">${T('set.open')}</button>
         </div>
       </div>
 
       <div>
-        <div class="set-sec-title">关于</div>
+        <div class="set-sec-title">${T('set.about_section')}</div>
         <div class="about-box">
           <div class="about-head">
             <img class="brand-mark" src="/static/icon-128.png" alt="" width="34" height="34">
             <div>
               <div class="about-name">Waass Mod Manager</div>
-              <div class="about-ver">版本 ${esc(ver)}${ABOUT?.date ? ' · ' + esc(ABOUT.date) : ''}${ABOUT?.frozen ? ' · 已打包版' : ' · 源码版'}</div>
+              <div class="about-ver">${T('set.about_version', { ver: esc(ver) })}${ABOUT?.date ? ' · ' + esc(ABOUT.date) : ''}${ABOUT?.frozen ? ' · ' + T('set.build_packaged') : ' · ' + T('set.build_source')}</div>
             </div>
           </div>
           <div class="about-rows">
-            <div><span>许可证</span><b>${esc(ABOUT?.license || 'MIT')}</b></div>
-            <div><span>模组 / 已启用</span><b>${ABOUT?.counts?.mods ?? S.mods.length} / ${ABOUT?.counts?.enabled ?? '—'}</b></div>
-            <div><span>安装档案</span><b>${ABOUT?.counts?.packages ?? 0} 个包</b></div>
-            <div><span>运行环境</span><b>Python ${esc(ABOUT?.python || '')} · ${esc(ABOUT?.os || '')}</b></div>
+            <div><span>${T('set.license')}</span><b>${esc(ABOUT?.license || 'MIT')}</b></div>
+            <div><span>${T('set.mods_enabled')}</span><b>${ABOUT?.counts?.mods ?? S.mods.length} / ${ABOUT?.counts?.enabled ?? '—'}</b></div>
+            <div><span>${T('set.install_records')}</span><b>${TN('set.archives_one', 'set.archives_many', ABOUT?.counts?.packages ?? 0)}</b></div>
+            <div><span>${T('set.runtime')}</span><b>Python ${esc(ABOUT?.python || '')} · ${esc(ABOUT?.os || '')}</b></div>
           </div>
-          <div class="about-path" title="${esc(ABOUT?.data_dir || '')}">数据目录　${esc(ABOUT?.data_dir || '')}</div>
+          <div class="about-path" title="${esc(ABOUT?.data_dir || '')}">${T('set.data_dir', { path: esc(ABOUT?.data_dir || '') })}</div>
           <div class="set-actions" style="margin-top:9px">
-            <button class="btn btn-sm" id="setOpenData">打开数据目录</button>
-            <button class="btn btn-sm" id="setCheckUpd">检查程序更新</button>
+            <button class="btn btn-sm" id="setOpenData">${T('set.open_data_dir')}</button>
+            <button class="btn btn-sm" id="setCheckUpd">${T('set.check_update')}</button>
           </div>
           <div class="about-note" id="aboutUpd">
-            这个程序只管自己的文件，从不改写你没让它改的游戏内容。
+            ${T('set.about_note')}
           </div>
         </div>
       </div>
@@ -194,18 +191,18 @@ async function openSettingsDialog() {
     // 原生选目录框被系统策略挡住时才退回手输。手输用站内的输入框，
     // 不用浏览器的 prompt()（在 --app 窗口里它拿不到输入法候选框）。
     const p = picked.path || await askText({
-      title: '设置游戏目录',
-      label: '粘贴游戏根目录（含 bin 文件夹的那个）',
+      title: T('set.ask_game_dir_title'),
+      label: T('set.ask_game_dir_label'),
       value: cfg.game_root || '',
       placeholder: 'D:\\game\\steam\\steamapps\\common\\The Witcher 3',
     });
     if (!p) return;
     try {
       await api('/api/settings', { action: 'set_game_root', path: p });
-      toast('游戏目录已更新');
+      toast(T('set.game_dir_updated'));
       await load();
       openSettingsDialog();
-    } catch (e) { toast('设置失败：' + e.message, 4000); }
+    } catch (e) { toast(T('set.save_failed', { msg: e.message }), 4000); }
   };
 
   /* ---- 下载目录 ---- */
@@ -213,10 +210,10 @@ async function openSettingsDialog() {
     if (!path) return;
     try {
       await api('/api/settings', { action: 'add_dir', path });
-      toast('已添加');
+      toast(T('set.added'));
       refreshMainSoon();
       openSettingsDialog();
-    } catch (e) { toast('添加失败：' + e.message, 4000); }
+    } catch (e) { toast(T('set.add_failed', { msg: e.message }), 4000); }
   };
 
   $('#setAddDir').onclick = () => addDir($('#setAddManual').value.trim());
@@ -227,7 +224,7 @@ async function openSettingsDialog() {
   };
   $('#setResetDir').onclick = async () => {
     await api('/api/settings', { action: 'reset_dirs' });
-    toast('已恢复默认目录');
+    toast(T('set.dirs_restored'));
     refreshMainSoon();
     openSettingsDialog();
   };
@@ -238,9 +235,9 @@ async function openSettingsDialog() {
   $$('#setDirs [data-rmdir]').forEach(b => {
     b.onclick = async () => {
       const p = b.dataset.rmdir;
-      if (!confirm(`不再扫描这个目录？\n${p}\n\n不会删除里面的任何文件，只是不在这里列出了。`)) return;
+      if (!confirm(T('set.confirm_remove_dir', { path: p }))) return;
       await api('/api/settings', { action: 'remove_dir', path: p });
-      toast('已移除');
+      toast(T('set.removed'));
       refreshMainSoon();
       openSettingsDialog();
     };
@@ -254,7 +251,7 @@ async function openSettingsDialog() {
       nexus_auto_cover: $('#optNexusCover').checked,
       ...extra,
     });
-    toast('已保存');
+    toast(T('set.saved'));
   };
   $('#optNexusMeta').onchange = () => saveNexusOpt();
   $('#optNexusCover').onchange = () => saveNexusOpt();
@@ -263,9 +260,9 @@ async function openSettingsDialog() {
   const doClean = async (ids, safeOnly) => {
     try {
       const r = await api('/api/storage/clean', { ids: ids || [], safe_only: !!safeOnly });
-      toast(r.freed ? `释放了 ${fmtSize(r.freed)}` : '没有可释放的空间（文件可能正被占用）');
+      toast(r.freed ? T('set.freed', { size: fmtSize(r.freed) }) : T('set.freed_none'));
       openSettingsDialog();
-    } catch (e) { toast('清理失败：' + e.message, 4000); }
+    } catch (e) { toast(T('set.clean_failed', { msg: e.message }), 4000); }
   };
 
   const safeBtn = $('#stgCleanSafe');
@@ -276,8 +273,8 @@ async function openSettingsDialog() {
       const g = (STG?.groups || []).find(x => x.id === b.dataset.stg);
       if (!g) return;
       const tip = g.risk === 'danger'
-        ? `永久删除「${g.title}」里的所有文件？\n\n${g.desc}\n\n这一步不可撤销，删了就找不回来了。`
-        : `清理「${g.title}」？\n\n${g.desc}`;
+        ? T('set.confirm_danger', { title: g.title, desc: g.desc })
+        : T('set.confirm_clean', { title: g.title, desc: g.desc });
       if (!confirm(tip)) return;
       doClean([g.id], false);
     };
@@ -286,22 +283,22 @@ async function openSettingsDialog() {
   /* ---- 关于 ---- */
   $('#setOpenData').onclick = async () => {
     try { await api('/api/open-folder', { key: '@data' }); }
-    catch (e) { toast('打不开：' + e.message, 3500); }
+    catch (e) { toast(T('set.open_failed', { msg: e.message }), 3500); }
   };
   $('#setCheckUpd').onclick = async () => {
     const box = $('#aboutUpd');
     const btn = $('#setCheckUpd');
     btn.disabled = true;
-    box.textContent = '正在检查…';
+    box.textContent = T('set.checking');
     try {
       const r = await api('/api/app/check', {});
       box.className = 'about-note' + (r.newer ? ' is-new' : '');
       box.innerHTML = esc(r.message || '') +
-        (r.url && r.newer ? ` · <a href="#" id="aboutGo">去打开发布页</a>` : '');
+        (r.url && r.newer ? ` · <a href="#" id="aboutGo">${T('set.update_link')}</a>` : '');
       const go = $('#aboutGo');
       if (go) go.onclick = (e) => { e.preventDefault(); window.open(r.url, '_blank', 'noopener'); };
     } catch (e) {
-      box.textContent = '检查失败：' + e.message;
+      box.textContent = T('set.check_failed', { msg: e.message });
     } finally {
       btn.disabled = false;
     }

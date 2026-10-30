@@ -19,7 +19,7 @@ import os
 import shutil
 from pathlib import Path
 
-from . import guard
+from . import guard, i18n
 from .paths import DATA_DIR
 
 # 这些是本程序的大脑，永远不删，只在界面上显示体积
@@ -64,79 +64,70 @@ def _size(path: Path) -> tuple[int, int]:
 # risk: safe   = 删了立刻能再生，无感
 #       caution= 删了少点方便（封面要重新搬、快照没了不能撤销）
 #       danger = 删了就永久没了（隔离区里的 mod、保留的原包）
+# title/desc 存的是 i18n 键（stor.*，见 _work/i18n/backend-a.json），
+# 在 report()/clean() 出口处用 i18n.t() 落成当前语言的文案。
 GROUPS = [
     {
         "id": "webview",
-        "title": "界面窗口的缓存",
-        "desc": "开界面用的浏览器内核存下的临时文件。删掉没有任何影响，"
-                "下次启动会自己重建（界面偏好会重置一次）。",
+        "title": "stor.webview_title",
+        "desc": "stor.webview_desc",
         "paths": ["webview", "webview-profile"],
         "risk": "safe",
     },
     {
         "id": "dead",
-        "title": "不再使用的旧文件",
-        "desc": "早期版本留下的、现在完全不读的缓存和日志。留着只是占地方。",
+        "title": "stor.dead_title",
+        "desc": "stor.dead_desc",
         "paths": ["nexus_cache.json", "updates.json", "server.log",
                   "nul", "crash.log"],
         "risk": "safe",
     },
     {
         "id": "thumbs",
-        "title": "模组封面图",
-        "desc": "卡片上显示的封面。删掉不影响任何功能，只是卡片会变成纯色底；"
-                "有 Nexus ID 的会在下次打开时自动重新取，没有 ID 的可以在设置里"
-                "重新导入一次旧资料。",
+        "title": "stor.thumbs_title",
+        "desc": "stor.thumbs_desc",
         "paths": ["thumbs"],
         "risk": "caution",
     },
     {
         "id": "nexus",
-        "title": "从 Nexus 查到的资料",
-        "desc": "作者、简介、最新版本号的缓存（每个 mod 一个小文件）。"
-                "删掉不影响任何功能，下次打开会重新查一次（只查有 ID 的）。",
+        "title": "stor.nexus_title",
+        "desc": "stor.nexus_desc",
         "paths": ["nexus"],
         "risk": "safe",
     },
     {
         "id": "jobs",
-        "title": "汉化中间文件（含旧版中文名数据）",
-        "desc": "导出给 AI 的待翻译清单、导回来的结果。做完的可以清，"
-                "不影响已经写进游戏或已保存的译文。中文名那套功能 1.2.5 已下线，"
-                "names.json / names/ 里的旧数据也可以一起清掉。",
+        "title": "stor.jobs_title",
+        "desc": "stor.jobs_desc",
         "paths": ["translate", "names", "names.json"],
         "risk": "caution",
     },
     {
         "id": "snapshots",
-        "title": "写操作快照",
-        "desc": "每次改 mods.settings 或菜单文件前，把原文件存一份。"
-                "这是「撤销」的依据，清掉之后就撤不回更早的操作了。"
-                "程序会自动只保留最近 30 份。",
+        "title": "stor.snapshots_title",
+        "desc": "stor.snapshots_desc",
         "paths": ["snapshots"],
         "risk": "caution",
     },
     {
         "id": "localize_backups",
-        "title": "汉化中间文件（旧版）",
-        "desc": "1.1 及更早版本导出待翻译清单时留下的备份。新版的原件备份不在"
-                "这里，已经归到「汉化原件」里保护起来了，清这一项不会影响还原。",
+        "title": "stor.localize_backups_title",
+        "desc": "stor.localize_backups_desc",
         "paths": ["localize_backups"],
         "risk": "caution",
     },
     {
         "id": "quarantine",
-        "title": "隔离区（卸载的模组）",
-        "desc": "卸载 mod 时没有真删，而是搬到这里，方便反悔。确认不再需要就能永久删除。"
-                "删掉以后这些 mod 的文件就彻底没了。",
+        "title": "stor.quarantine_title",
+        "desc": "stor.quarantine_desc",
         "paths": ["quarantine"],
         "risk": "danger",
     },
     {
         "id": "archives",
-        "title": "旧版留下的原包副本",
-        "desc": "1.2.4 之前的「安装后复制一份原包」存下来的副本。这个功能已经去掉，"
-                "这里只用来清理以前留下的文件 —— 删掉不影响已装好的 mod。",
+        "title": "stor.archives_title",
+        "desc": "stor.archives_desc",
         "paths": ["archives"],
         "risk": "danger",
     },
@@ -196,9 +187,8 @@ def _unaccounted(groups: list[dict], core_bytes: int) -> dict:
         f += df
         names.append(e.name)
     return {
-        "id": "other", "title": "其他文件",
-        "desc": "数据目录里不属于上面任何一类的东西。程序不会动它们，"
-                "如果认不出来源，可以直接去数据目录看一眼。",
+        "id": "other", "title": i18n.t("stor.other_title"),
+        "desc": i18n.t("stor.other_desc"),
         "risk": "caution", "bytes": b, "files": f,
         "detail": names[:8], "paths": [], "actionable": False,
     }
@@ -223,7 +213,8 @@ def report() -> dict:
         if not found:
             continue
         groups.append({
-            "id": g["id"], "title": g["title"], "desc": g["desc"],
+            "id": g["id"],
+            "title": i18n.t(g["title"]), "desc": i18n.t(g["desc"]),
             "risk": g["risk"], "bytes": b, "files": f,
             "detail": detail[:8], "actionable": True,
             "paths": [str(_abs(r)) for r in g["paths"] if _abs(r).exists()],
@@ -317,7 +308,7 @@ def clean(ids: list[str] | None = None, only_safe: bool = False) -> dict:
                 continue
             got += _remove(p)
         if got:
-            rows.append({"id": g["id"], "title": g["title"], "bytes": got})
+            rows.append({"id": g["id"], "title": i18n.t(g["title"]), "bytes": got})
             freed += got
     return {"ok": True, "freed": freed, "rows": rows}
 

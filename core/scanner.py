@@ -11,7 +11,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from . import identify, legacy, merger
+from . import i18n, identify, legacy, merger
 from .models import ModRecord, ScanResult, Warning
 from .paths import DATA_DIR, game_layout
 from .settings_ini import SettingsFile
@@ -393,7 +393,8 @@ def scan(game_root: Path, data_dir: Path = DATA_DIR) -> ScanResult:
     if mstate["exists"] and not mstate["ok"]:
         res.warnings.append(Warning(
             "warn", "merge_unregistered",
-            f"合订本『{mstate['name']}』不生效：{mstate['problem']}",
+            i18n.t("scan.merge_unregistered",
+                   name=mstate['name'], problem=mstate['problem']),
             target=mstate["name"]))
 
     # ---------- 4. 一致性检查 ----------
@@ -402,7 +403,7 @@ def scan(game_root: Path, data_dir: Path = DATA_DIR) -> ScanResult:
         if sec["name"].lower() not in disk_keys:
             res.warnings.append(Warning(
                 "warn", "stale_settings",
-                f"mods.settings 里有『{sec['name']}』，但磁盘上没有这个文件夹（残留条目）",
+                i18n.t("scan.stale_settings", name=sec['name']),
                 target=sec["name"]))
 
     dup: dict[int, list[str]] = {}
@@ -413,6 +414,7 @@ def scan(game_root: Path, data_dir: Path = DATA_DIR) -> ScanResult:
         if len(names) > 1:
             res.warnings.append(Warning(
                 "warn", "dup_priority",
-                f"优先级 {prio} 被 {len(names)} 个 mod 共用：{'、'.join(names)}"))
+                i18n.t("scan.dup_priority", prio=prio,
+                       n=len(names), names="、".join(names))))
 
     return res

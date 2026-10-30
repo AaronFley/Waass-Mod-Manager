@@ -22,6 +22,8 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
+from core import i18n
+
 # 被认为是「文本」的最小长度；再短就都是格式字段了
 MIN_LEN = 4
 MAX_LEN = 4000
@@ -149,21 +151,21 @@ def probe(path: Path | str) -> dict:
         size = p.stat().st_size
         magic = p.read_bytes()[:4]
     except OSError as e:
-        return {"ok": False, "reason": f"读不了：{e}"}
+        return {"ok": False, "reason": i18n.t("ws.read_failed", err=e)}
 
     if magic != b"RTSW":
-        return {"ok": False, "reason": "不是 w3strings 文件（缺少 RTSW 头）"}
+        return {"ok": False, "reason": i18n.t("ws.not_w3strings")}
 
     texts = extract(p)
     chars = sum(len(t["text"]) for t in texts)
     if not texts:
-        return {"ok": False, "reason": "找不到可读文本，这个文件是加密的，改不了",
+        return {"ok": False, "reason": i18n.t("ws.encrypted"),
                 "texts": 0, "size": size}
     # 判定「明文」的门槛：至少 3 条、总字数 24 以上。
     # 加密文件偶尔也能解出几个假碎片，卡在这里。
     if len(texts) < 3 or chars < 24:
         return {"ok": False,
-                "reason": "可读内容太少，判断为加密文件（只能由作者提供 CSV 才能翻）",
+                "reason": i18n.t("ws.too_few"),
                 "texts": len(texts), "size": size}
     return {"ok": True, "reason": "", "texts": len(texts),
             "chars": chars, "size": size}
@@ -182,7 +184,7 @@ def apply(path: Path | str, mapping: dict[str, str],
     p = Path(path)
     info = probe(p)
     if not info["ok"]:
-        raise ValueError(f"这个文件不能安全修改：{info['reason']}")
+        raise ValueError(i18n.t("ws.unsafe", reason=info["reason"]))
 
     raw = bytearray(p.read_bytes())
     spans = extract(p)
@@ -235,7 +237,7 @@ def apply(path: Path | str, mapping: dict[str, str],
 
     # 长度必须一致，这是安全底线
     if len(raw) != result["size_before"]:
-        raise RuntimeError("内部错误：替换后文件长度变了，已放弃写入（文件未被修改）")
+        raise RuntimeError(i18n.t("ws.length_changed"))
 
     p.write_bytes(raw)
     result["size_after"] = len(raw)
