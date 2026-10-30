@@ -23,7 +23,7 @@ from core.scanner import scan
 from core import (actions, appinfo, conflicts, downloads, gamever, guard, identify,
                   library, localize, localize_backup, localize_job, merger,
                   nexus_meta, picker, registry, safety,
-                  saves, storage, track, translate, ui as ui_store)
+                  saves, storage, track, translate, ui as ui_store, winwatch)
 from core import install as installer
 
 APP_DIR = Path(__file__).resolve().parent
@@ -33,10 +33,104 @@ STATIC = WEB / "static"
 TOKEN = secrets.token_urlsafe(24)
 
 # 界面窗口关掉之后，进程要自己退出，否则会留下一个看不见的服务在后台，
-# 下次双击还会撞上单实例锁。页面在 pagehide 时打一声招呼，这里等几秒确认
-# 没有新页面接手（刷新）就退出。
-LIFECYCLE = {"bye_at": 0.0, "watch": False}
-CLOSE_GRACE = 6.0
+# 下次双击还会撞上单实例锁。
+#
+# 两条判据，缺一不可（1.2.7 补的）：
+#   1. 快路径：页面 pagehide 时打一声招呼（/api/bye），等几秒没有新页面接手就退。
+#      刷新也会触发，但新页面会立刻请求页面本身，把倒计时取消掉。
+#   2. 慢路径：直接问系统还有没有我们的可见窗口（core/winwatch.py）。
+#      原因：那一枪不可靠 —— 关窗瞬间渲染进程被收掉、或内核已在拆网络服务时，
+#      beacon 根本发不出去，服务端就会一直等一个永远不来的招呼。
+#      2026-10-30 实测：窗口关了，进程在后台躺了 40 多分钟。
+LIFECYCLE = {
+    "bye_at": 0.0,        # 页面说再见的时间（0 = 没说）
+    "watch": False,       # 是否开着「关窗就退出」的看守
+    "seen_page": False,   # 有没有真的加载过页面（没加载过就别乱退）
+    "first_page": 0.0,    # 第一次加载页面的时间
+    "last_seen": 0.0,     # 最后一次收到任何请求的时间
+    "app_window": False,  # 是不是我们自己的 --app 窗口（浏览器标签页模式不看窗口）
+    "started_at": 0.0,    # 窗口是什么时候叫起来的
+    "reason": "",         # 退出原因，写进 data/lifecycle.log 方便事后查
+}
+CLOSE_GRACE = 6.0        # 说了再见之后等几秒，留给刷新
+WINDOW_WARMUP = 15.0     # 页面加载后这段时间内不看窗口（窗口可能还没弹出来）
+WINDOW_QUIET = 8.0       # 窗口没了的同时，还得安静这么久才认
+WINDOW_MISSES = 3        # 连续几次看不到窗口才算数（每次间隔 1 秒）
+WINDOW_NEVER = 60.0      # 开了独立窗口却一直没人加载页面：这么久就别等了
+
+
+def keep_alive() -> bool:
+    """调试用：WAASS_KEEP=1 时不许自己退出（跑接口、看窗口都在用）。"""
+    return os.environ.get("WAASS_KEEP") == "1"
+
+
+def mark_app_window() -> None:
+    """run.py 用 --app 开出独立窗口之后调一次，慢路径才启用。
+
+    浏览器标签页模式（webbrowser.open 的兜底）不能看窗口：用户切到别的标签，
+    标题就变了，会被误判成「窗口没了」。
+    """
+    LIFECYCLE["app_window"] = True
+    LIFECYCLE["started_at"] = time.time()
+
+
+def touch_page(life: dict | None = None, now: float | None = None) -> None:
+    """任何请求都算「还有人在用」。"""
+    life = LIFECYCLE if life is None else life
+    now = time.time() if now is None else now
+    life["last_seen"] = now
+    if not life["seen_page"]:
+        life["seen_page"] = True
+        life["first_page"] = now
+
+
+def exit_reason(now: float, life: dict, win_count: int,
+                grace: float = CLOSE_GRACE,
+                warmup: float = WINDOW_WARMUP,
+                quiet: float = WINDOW_QUIET,
+                never: float = WINDOW_NEVER) -> str:
+    """该不该退出。返回 'bye' / 'no-window' / 'no-page' / ''（继续跑）。
+
+    纯函数：时间、窗口数全从参数进，测试直接喂假数据。
+    """
+    bye = life.get("bye_at") or 0.0
+    if bye and now - bye >= grace:
+        return "bye"
+    if win_count is None or win_count < 0:            # 平台查不了 → 只认 bye
+        return ""
+    if not life.get("app_window"):
+        return ""
+    if not life.get("seen_page"):
+        # 窗口叫起来了却一直没人加载页面：外壳可能压根没起来，别在这儿躺一整天
+        started = life.get("started_at") or 0.0
+        if started and now - started >= never:
+            return "no-page"
+        return ""
+    if now - (life.get("first_page") or 0.0) < warmup:
+        return ""
+    if win_count > 0:
+        return ""
+    if now - (life.get("last_seen") or 0.0) < quiet:  # 刚还有人说活，可能窗口在重开
+        return ""
+    return "no-window"
+
+
+def _log_lifecycle(reason: str) -> None:
+    """退出原因留一行痕迹，只留最近 8KB。出问题时有据可查。"""
+    try:
+        from core.paths import DATA_DIR
+        from core import guard
+        p = DATA_DIR / "lifecycle.log"
+        guard.allow(DATA_DIR)
+        guard.assert_can_write(p, "退出日志")
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        line = f"{stamp}  退出（{reason}）\n"
+        old = ""
+        if p.is_file():
+            old = p.read_text(encoding="utf-8", errors="replace")[-8000:]
+        p.write_text(old + line, encoding="utf-8")
+    except Exception:                                 # noqa: BLE001 写不了日志也得退
+        pass
 
 mimetypes.add_type("text/css", ".css")
 mimetypes.add_type("application/javascript", ".js")
@@ -301,6 +395,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self._forbidden():
             return
+        touch_page()
         u = urllib.parse.urlparse(self.path)
         path = urllib.parse.unquote(u.path)
 
@@ -504,6 +599,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self._forbidden():
             return
+        touch_page()
         u = urllib.parse.urlparse(self.path)
         path = u.path
         # 请求体上限：汉化译文导入这类最大也就几 MB，64MB 绰绰有余。
@@ -1302,25 +1398,46 @@ def serve(port: int = 0) -> ThreadingHTTPServer:
     return httpd
 
 
+def _graceful_exit(httpd: ThreadingHTTPServer, reason: str) -> None:
+    """退出。清理缓存这一步可能被占用/杀毒拖住，所以先挂一个 3 秒的保险丝。"""
+    LIFECYCLE["reason"] = reason
+    _log_lifecycle(reason)
+    threading.Timer(3.0, os._exit, (0,)).start()
+    # 退出前把浏览器内核的临时文件带走，别留几 MB 垃圾在硬盘上
+    try:
+        storage.trim_browser_cache()
+    except Exception:                                # noqa: BLE001
+        pass
+    try:
+        httpd.shutdown()
+    except Exception:                                # noqa: BLE001
+        pass
+    os._exit(0)
+
+
 def _watch_close_loop(httpd: ThreadingHTTPServer, grace: float = CLOSE_GRACE) -> None:
-    """界面窗口关了就把自己关掉，别留后台进程。"""
+    """界面窗口关了就把自己关掉，别留后台进程。
+
+    快路径看页面打的那声招呼，慢路径看系统里还有没有窗口（见 LIFECYCLE 上方注释）。
+    """
+    misses = 0
     while True:
         time.sleep(1.0)
-        b = LIFECYCLE["bye_at"]
-        if not b:
+        if keep_alive():
             continue
-        if time.time() - b < grace:
+        try:
+            n = winwatch.count() if LIFECYCLE["app_window"] else -1
+        except Exception:                            # noqa: BLE001 查窗口失败就当不知道
+            n = -1
+        reason = exit_reason(time.time(), LIFECYCLE, n, grace=grace)
+        if reason in ("bye", "no-page"):
+            _graceful_exit(httpd, reason)
+        if reason == "no-window":
+            misses += 1
+            if misses >= WINDOW_MISSES:
+                _graceful_exit(httpd, f"{reason}({n})")
             continue
-        # 退出前把浏览器内核的临时文件带走，别留几 MB 垃圾在硬盘上
-        try:
-            storage.trim_browser_cache()
-        except Exception:                            # noqa: BLE001
-            pass
-        try:
-            httpd.shutdown()
-        except Exception:                            # noqa: BLE001
-            pass
-        os._exit(0)
+        misses = 0
 
 
 def start_background(port: int = 0, watch_close: bool = False) -> tuple[ThreadingHTTPServer, int]:

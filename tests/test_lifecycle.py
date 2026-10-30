@@ -8,6 +8,11 @@
     A. 关窗（只报一声，没有新页面）→ 应该在 6 秒左右退出
     B. 刷新（报一声之后马上又加载了页面）→ 不能误杀
 
+还有一组纯函数检查（1.2.7 加的）：第二条退出判据「窗口没了」。
+那一枪（pagehide 的 beacon）实测会丢 —— 关窗瞬间渲染进程被收掉，包发不出去，
+进程就永久留在后台。所以补了「直接问系统还有没有窗口」，这里只测判定逻辑，
+真窗口留给冒烟验。
+
 跑法：
     python tests/test_lifecycle.py
 """
@@ -75,6 +80,52 @@ def run_child(mode: str, data: Path) -> tuple[int, float, str]:
     return p.returncode, time.time() - t0, (p.stdout or "") + (p.stderr or "")
 
 
+def unit_checks() -> None:
+    """退出判据的纯函数检查：不启服务、不看真窗口。"""
+    print("\n[U] 退出判据（窗口兜底）")
+    sys.path.insert(0, str(ROOT))
+    import os
+    os.environ.setdefault("WAASS_MULTI", "1")
+    from core import winwatch
+    from server import exit_reason
+
+    NOW = 1000.0
+
+    def life(**kw):
+        base = {"bye_at": 0.0, "seen_page": True, "first_page": NOW - 100,
+                "last_seen": NOW - 100, "app_window": True}
+        base.update(kw)
+        return base
+
+    check("刚说再见还在宽限期内，不退",
+          exit_reason(NOW, life(bye_at=NOW - 4), 1) == "")
+    check("过了宽限期就按 bye 退",
+          exit_reason(NOW, life(bye_at=NOW - 10), 1) == "bye")
+    check("窗口没了、也安静够了 → 退",
+          exit_reason(NOW, life(), 0) == "no-window")
+    check("窗口还在 → 不退", exit_reason(NOW, life(), 1) == "")
+    check("查不了窗口（-1）→ 只认 bye", exit_reason(NOW, life(), -1) == "")
+    check("刚还有请求，先别急着退",
+          exit_reason(NOW, life(last_seen=NOW - 2), 0) == "")
+    check("页面才加载 5 秒，窗口可能还没弹出来",
+          exit_reason(NOW, life(first_page=NOW - 5), 0) == "")
+    check("从没加载过页面 → 不退",
+          exit_reason(NOW, life(seen_page=False), 0) == "")
+    check("窗口叫起来一小时没人加载页面 → 当作窗口没起来，退",
+          exit_reason(NOW, life(seen_page=False, first_page=0, last_seen=0,
+                                started_at=NOW - 3600), 0) == "no-page")
+    check("窗口刚叫起来、还没加载完 → 不退",
+          exit_reason(NOW, life(seen_page=False, first_page=0, last_seen=0,
+                                started_at=NOW - 5), 0) == "")
+    check("浏览器标签页模式（不是 --app 窗口）→ 不看窗口",
+          exit_reason(NOW, life(app_window=False), 0) == "")
+
+    n = winwatch.count()
+    check("winwatch 查询不抛异常、返回整数", isinstance(n, int) and n >= -1, repr(n))
+    t = winwatch.titles()
+    check("titles() 要么是名单要么 None", t is None or isinstance(t, list), repr(type(t)))
+
+
 def main() -> int:
     base = Path(tempfile.mkdtemp(prefix="waass-life-"))
 
@@ -89,6 +140,8 @@ def main() -> int:
     check("页面还在时进程没退", "STAY_OK" in out and code == 0,
           f"exit={code} out={out[-300:]}")
     check("足足活过了宽限期", took >= 9.0, f"{took:.1f}s")
+
+    unit_checks()
 
     print("\n" + ("全部通过" if not fails else f"失败 {len(fails)} 项：{fails}"))
     return 0 if not fails else 1

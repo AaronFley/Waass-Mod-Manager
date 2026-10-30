@@ -1708,6 +1708,14 @@ window.addEventListener('pagehide', () => {
   } catch { /* 老浏览器就算了，进程会留着，下次启动会提示已在运行 */ }
 });
 
+/* 每 15 秒跟后台打一声招呼。
+   后台靠「窗口不见了 + 有一阵子没人说话」判断该不该退出 —— 只看 pagehide
+   那一枪不够可靠：关窗瞬间这一枪有机会发不出去，进程就留在后台了（1.2.6 实测
+   关窗后活了四十多分钟）。这里只请求 /api/health，很小。 */
+setInterval(() => {
+  fetch('/api/health', { cache: 'no-store' }).catch(() => {});
+}, 15000);
+
 load().then(() => {
   const sel = _qs.get('select');
   // 合订本不在 S.mods 里（它单独走 scan.merged），要单独放行

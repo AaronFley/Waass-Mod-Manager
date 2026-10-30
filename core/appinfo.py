@@ -21,7 +21,7 @@ import urllib.request
 from pathlib import Path
 
 APP_NAME = "Waass Mod Manager"
-APP_VERSION = "1.2.6"
+APP_VERSION = "1.2.7"
 APP_DATE = "2026-10-30"
 APP_REPO = ""                     # 发布后填 GitHub 地址
 LICENSE = "MIT"

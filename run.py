@@ -46,7 +46,7 @@ def _silence_streams() -> None:
 
 _silence_streams()
 
-from server import STATE, start_background          # noqa: E402
+from server import STATE, mark_app_window, start_background          # noqa: E402
 
 MUTEX_NAME = "Local\\WaassModManager_SingleInstance"
 ERROR_ALREADY_EXISTS = 183
@@ -229,6 +229,9 @@ def main() -> int:
     opened = open_app_window(url) if not args.browser else False
     if not opened:
         webbrowser.open(url)
+    else:
+        # 独立窗口：允许「按窗口判退出」这条慢路径（浏览器标签页模式不能用）
+        mark_app_window()
     try:
         while True:
             time.sleep(1)
