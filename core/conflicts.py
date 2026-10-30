@@ -154,11 +154,11 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
     merged_count = 0
     for (level, involved, covered), files in sorted(
             buckets.items(), key=lambda x: (x[0][0] == "ok", -len(x[1]))):
-        names = "、".join(f"『{_name_of(mods, k)}』" for k in involved)
+        names = i18n.join(i18n.quote(_name_of(mods, k)) for k in involved)
         more = i18n.t("conf.more_files", n=len(files) - 3) if len(files) > 3 else ""
         if level == "ok":
             merged_count += len(files)
-            srcs = "、".join(f"『{_name_of(mods, k)}』" for k in covered) or i18n.t("conf.source_mods")
+            srcs = i18n.join(i18n.quote(_name_of(mods, k)) for k in covered) or i18n.t("conf.source_mods")
             prod = next((k for k in involved
                          if k.lower() in prod_names), "")
             prod_name = _name_of(mods, prod) if prod else inv.get("merged_name", "")
@@ -183,7 +183,7 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
     if inv.get("found"):
         dead = merger.stale_report(root, inv, mods)
         if dead:
-            names = "、".join(f"『{n}』" for n in dead[:5])
+            names = i18n.join(i18n.quote(n) for n in dead[:5])
             add("merge_stale", "warn",
                 i18n.tn("conf.merge_stale_one", "conf.merge_stale_many", len(dead)),
                 i18n.t("conf.merge_stale_detail", names=names,
@@ -230,7 +230,7 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
             wrap_groups.setdefault(allkeys, []).append(f"{cls}.{fn}")
 
     for who, funcs in sorted(rep_groups.items(), key=lambda x: -len(x[1])):
-        names = "、".join(f"『{_name_of(mods, k)}』" for k in who)
+        names = i18n.join(i18n.quote(_name_of(mods, k)) for k in who)
         more = i18n.t("conf.more_funcs_hidden", n=len(funcs) - 3) if len(funcs) > 3 else ""
         add("anno_replace", "warn",
             i18n.tn("conf.anno_replace_one", "conf.anno_replace_many", len(funcs)),
@@ -238,7 +238,7 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
             list(who), funcs)
 
     for who, funcs in sorted(wrap_groups.items(), key=lambda x: -len(x[1])):
-        names = "、".join(f"『{_name_of(mods, k)}』" for k in who)
+        names = i18n.join(i18n.quote(_name_of(mods, k)) for k in who)
         more = i18n.t("conf.more_funcs_hidden", n=len(funcs) - 3) if len(funcs) > 3 else ""
         add("anno_wrap", "info",
             i18n.tn("conf.anno_wrap_one", "conf.anno_wrap_many",
@@ -251,7 +251,7 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
     # 游戏只报文件名，用户完全看不出问题在编码上。
     if enc_bad:
         mods_in = sorted({k for k, _r, _e in enc_bad})
-        names = "、".join(f"『{_name_of(mods, k)}』" for k in mods_in)
+        names = i18n.join(i18n.quote(_name_of(mods, k)) for k in mods_in)
         add("ws_encoding", "warn",
             i18n.tn("conf.ws_encoding_one", "conf.ws_encoding_many", len(enc_bad)),
             i18n.t("conf.ws_encoding_detail", names=names, enc=enc_bad[0][2]),
@@ -274,7 +274,7 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
         uniq = sorted(set(keys))
         if len(uniq) < 2:
             continue
-        names = "、".join(f"『{_name_of(mods, k)}』" for k in uniq)
+        names = i18n.join(i18n.quote(_name_of(mods, k)) for k in uniq)
         add("menu_xml_clash", "warn",
             i18n.t("conf.menu_xml_title", xml=xml),
             i18n.t("conf.menu_xml_detail", names=names),
@@ -301,7 +301,7 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
         # 一个 mod 自己提供了两份同名语言文件才是真问题
         if len(uniq) < 2 or _count_same_mod(keys) == 0:
             continue
-        names = "、".join(f"『{_name_of(mods, k)}』" for k in uniq)
+        names = i18n.join(i18n.quote(_name_of(mods, k)) for k in uniq)
         add("w3strings_clash", "warn",
             i18n.t("conf.w3strings_title", rel=rel),
             i18n.t("conf.w3strings_detail", names=names),
@@ -338,9 +338,9 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
         # asset（贴图/模型/声音）不报：材质 mod 之间撞是常态，报出来全是噪音
 
     for uniq, files in sorted(ui_owner.items(), key=lambda x: -len(x[1])):
-        names = "、".join(f"『{_name_of(mods, k)}』" for k in uniq)
+        names = i18n.join(i18n.quote(_name_of(mods, k)) for k in uniq)
         leaves = [_leaf(f) for f in files]
-        head = "、".join(leaves[:3])
+        head = i18n.join(leaves[:3])
         if len(files) > 3:
             what = i18n.t("conf.files_more", head=head, n=len(files) - 3)
         elif len(files) > 1:
@@ -354,9 +354,9 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
             list(uniq), leaves)
 
     for uniq, files in sorted(data_owner.items(), key=lambda x: -len(x[1])):
-        names = "、".join(f"『{_name_of(mods, k)}』" for k in uniq)
+        names = i18n.join(i18n.quote(_name_of(mods, k)) for k in uniq)
         leaves = [_leaf(f) for f in files]
-        head = "、".join(leaves[:3])
+        head = i18n.join(leaves[:3])
         more = i18n.t("conf.more_n", n=len(files) - 3) if len(files) > 3 else ""
         add("bundle_data", "info",
             i18n.tn("conf.bundle_data_one", "conf.bundle_data_many",
@@ -386,7 +386,7 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
                     stale_w3[m.key] = (rel, v)
 
     if stale_w3:
-        pairs = "、".join(f"『{_name_of(mods, k)}』(v{v})" for k, (_r, v) in stale_w3.items())
+        pairs = i18n.join(i18n.quote(_name_of(mods, k)) + (f" (v{v})" if i18n.current() != "zh" else f"(v{v})") for k, (_r, v) in stale_w3.items())
         add("w3strings_stale", "warn",
             i18n.tn("conf.w3_stale_one", "conf.w3_stale_many", len(stale_w3)),
             i18n.t("conf.w3_stale_detail", base=base_ver, pairs=pairs),
@@ -400,7 +400,7 @@ def analyze(root: Path, mods: list, force: bool = False) -> dict:
     for p, keys in sorted(prio.items()):
         if len(keys) < 2:
             continue
-        names = "、".join(f"『{_name_of(mods, k)}』" for k in keys)
+        names = i18n.join(i18n.quote(_name_of(mods, k)) for k in keys)
         add("dup_priority", "warn",
             i18n.t("conf.dup_priority_title", p=p),
             i18n.t("conf.dup_priority_detail", names=names, p=p),

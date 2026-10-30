@@ -45,7 +45,7 @@ def start(root: Path, keys: list[str], cats=None) -> dict:
     cats = tuple(cats or localize.CAT_DEFAULT)
     unknown = [c for c in cats if c not in localize.CAT_LABEL]
     if unknown:
-        raise ValueError(i18n.t("loc.bad_cat", names="、".join(unknown)))
+        raise ValueError(i18n.t("loc.bad_cat", names=i18n.join(unknown)))
 
     jobs = localize.build_jobs(root, list(keys), cats=cats)
     items = jobs["items"]

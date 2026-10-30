@@ -232,7 +232,7 @@ class InstallPlan:
                                 len(self.bin_binaries)))
         if self.has_settings:
             bits.append("mods.settings")
-        return "、".join(bits) or i18n.t("arc.sum_none")
+        return i18n.join(bits) or i18n.t("arc.sum_none")
 
 
 def _subdirs(p: Path) -> list[Path]:

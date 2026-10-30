@@ -218,7 +218,7 @@ def reorder(root: Path, keys: list[str], prios: list[int] | None = None) -> dict
     if missing:
         raise ValueError(i18n.t(
             "act.missing_folders",
-            names="、".join(missing[:3]) + ("…" if len(missing) > 3 else "")))
+            names=i18n.join(missing[:3]) + ("…" if len(missing) > 3 else "")))
 
     if prios is None:
         nums = [(i + 1) * 10 for i in range(len(keys))]

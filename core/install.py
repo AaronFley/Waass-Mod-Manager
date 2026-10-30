@@ -242,7 +242,7 @@ def install(archive: str | Path, game_root: str | Path, *,
             raise NeedsConfirm(
                 i18n.tn("ins.conflict_one", "ins.conflict_many", len(conflicts),
                         n=len(conflicts),
-                        names="、".join((c.name or c.dst) for c in conflicts[:4])),
+                        names=i18n.join((c.name or c.dst) for c in conflicts[:4])),
                 {"conflicts": [{"dst": c.dst, "name": c.name, "kind": c.kind}
                                for c in conflicts],
                  "need": "on_conflict=replace"},
@@ -500,7 +500,7 @@ def restore(pkg_id: str, game_root: str | Path) -> dict:
 
     if not restored and not merge_changed:
         raise InstallError(
-            i18n.t("ins.restore_empty_blocked", names="、".join(blocked[:3]))
+            i18n.t("ins.restore_empty_blocked", names=i18n.join(blocked[:3]))
             if blocked else i18n.t("ins.restore_empty"))
 
     enabled: list[str] = []

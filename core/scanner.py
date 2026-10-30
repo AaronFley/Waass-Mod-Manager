@@ -415,6 +415,6 @@ def scan(game_root: Path, data_dir: Path = DATA_DIR) -> ScanResult:
             res.warnings.append(Warning(
                 "warn", "dup_priority",
                 i18n.t("scan.dup_priority", prio=prio,
-                       n=len(names), names="、".join(names))))
+                       n=len(names), names=i18n.join(names))))
 
     return res

@@ -101,30 +101,50 @@ def _cat() -> dict:
     return _state["cat"]
 
 
-def t(key: str, **params) -> str:
+def t(_key: str, **params) -> str:
     """取当前语言的一句话。
 
     找不到不抛异常，直接把键名还回去 —— 界面上出现 `install.preview_title`
     比整页崩掉好，而且一眼能看出漏了哪条，测试也会抓。
+    形参带下划线前缀：占位符里 `key` / `n` 是最常见的名字，调用方
+    `i18n.t("act.op_priority", key=k)` 这种写法不该撞上内部参数名。
     """
-    s = _cat().get(key)
+    s = _cat().get(_key)
     if s is None:
-        s = _read(FALLBACK).get(key)
+        s = _read(FALLBACK).get(_key)
     if s is None:
-        return key
+        return _key
     for k, v in params.items():
         s = s.replace("{" + k + "}", str(v))
     return s
 
 
-def tn(one: str, many: str, n, **params) -> str:
+def tn(_one: str, _many: str, _n, **params) -> str:
     """带单复数的句子。中文两份内容一样，英文按 n 选。
 
     只处理「1 和其它」这一档 —— 英文复数规则里这一档覆盖了本程序全部场景
     （可数个模组 / 个文件 / 处）。真要严格，得引 gettext，不值当。
+    形参带下划线前缀，理由同 t()：调用方允许再传一个 n= 占位符。
     """
-    key = one if int(n) == 1 else many
-    return t(key, n=n, **params)
+    key = _one if int(_n) == 1 else _many
+    # 调用方可能把数量又当占位符传了一遍（tn(..., 3, n=3)）—— 以它为准，
+    # 没传才注入内部的 _n，不然 t() 会收到两个 n。
+    params.setdefault("n", _n)
+    return t(key, **params)
+
+
+def join(parts) -> str:
+    """按当前语言把几个名字连成一串：中文顿号，英文逗号加空格。
+
+    模组名列表、冲突对象列表这类「名字，名字，名字」都用它，
+    别在业务代码里写死 `、` —— 英文界面会冒出全角顿号。
+    """
+    return ("、" if current() == "zh" else ", ").join(parts)
+
+
+def quote(s: str) -> str:
+    """按当前语言给名字加引号：中文『』，英文直引号。"""
+    return f"『{s}』" if current() == "zh" else f"'{s}'"
 
 
 def strings() -> dict:
