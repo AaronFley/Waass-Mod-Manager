@@ -242,6 +242,32 @@ It also watches two situations nobody notices until the game breaks:
 
 On machines without Script Merger, this entire panel hides itself; everything else keeps working.
 
+### 7. Moving to another PC: the program carries none of your data
+
+There is only an exe, and **all of your data lives in the `data/` folder next to
+it** (configuration, Nexus records, groups, install records, localization originals,
+save game backups). Moving means copying the whole folder.
+
+The mod list, load order, Script Merger state, download folders and game folder are
+**never a stored snapshot — they are scanned fresh on every launch**. The game folder
+is found through Steam / GOG / Epic's public records (or picked by hand in settings),
+mods are read from the `mods/` folder inside it, and load order comes from the game's
+own `mods.settings`. That is why copying the exe into an empty folder on the same
+machine shows what actually exists on that machine: it just read it, live. Nothing
+was carried over from somewhere else.
+
+The same works in reverse: on a PC without the game, it says it cannot find the game
+folder and asks you to pick one; everything else (mod archives, localization tools,
+settings) keeps working.
+
+The packaged exe contains only the Python standard library and the UI files — **no
+`data/` at all** — and neither the source nor the docs contain any author-machine paths.
+
+One heads-up: if the game sits under `C:\Program Files (x86)\Steam\...` (Steam's
+default), writing to `mods/` requires administrator rights. The app detects this at
+launch and tells you in an amber banner to "run as administrator", instead of failing
+only when you click install.
+
 ---
 
 ## Data usage and cleanup

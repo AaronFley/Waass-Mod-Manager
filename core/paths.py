@@ -27,6 +27,42 @@ def _writable(d: Path) -> bool:
         return False
 
 
+def dir_writable(d: Path) -> bool:
+    """这个目录能不能往里新建文件 —— 只问权限，**不真的写**。
+
+    为什么要问：Steam 默认把游戏装在 `C:\\Program Files (x86)`，那里的
+    目录对普通用户只读。程序自己（`data/`）能写，游戏目录不能写，于是
+    用户点「安装」「启用」时才会撞上 WinError 5，而那时他已经等了半天。
+
+    实现：用 CreateFileW 以「允许新建文件」的权限打开目录本身，带
+    FILE_FLAG_BACKUP_SEMANTICS（否则打不开目录）。系统会替我们把 ACL 算一遍，
+    拿得到句柄就是能写。全程不创建、不修改任何文件 —— 游戏目录一根汗毛都不动。
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.CreateFileW.restype = wintypes.HANDLE
+        k32.CreateFileW.argtypes = [
+            wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
+            wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE,
+        ]
+        FILE_ADD_FILE = 0x0002
+        FILE_FLAG_BACKUP_SEMANTICS = 0x02000000
+        OPEN_EXISTING = 3
+        INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+        share = 0x1 | 0x2 | 0x4          # 允许别人同时读/写/删，别挡着游戏
+        h = k32.CreateFileW(str(d), FILE_ADD_FILE, share, None,
+                            OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, None)
+        if not h or h == INVALID_HANDLE_VALUE:
+            return False
+        k32.CloseHandle(h)
+        return True
+    except Exception:                       # noqa: BLE001 问不出来就当作能写
+        return True
+
+
 def _data_home() -> Path:
     """打包成 exe 之后，数据不能放在临时解包目录里（退出就没了）。
 

@@ -2585,3 +2585,61 @@ Scope: `web/static/guide.html` + `guide.en.html`, `README.md` + `README.en.md`,
 `CHANGELOG.md` + `CHANGELOG.en.md`, `docs/SPEC.md` + `docs/SPEC.en.md`.
 Updating only one side leaves half the users with a wrong description — worse than
 no description at all.
+
+## 32. Stranger-machine audit (before going public, 2026-10-30)
+
+Criterion: **hand the exe to a player with no connection to you, and their machine must
+not be subject to a single assumption that only holds on the author's machine.** Every
+item below was checked; the outcome and the fix are listed with it.
+
+### 32.1 "Did you bake my data into the program?" (the user's challenge — must be proven, not asserted)
+
+- **The build contains only the Python standard library and `web/`.** How to verify:
+  look at `build/Waass-<version>/PKG-00.toc`; every entry coming from the project
+  directory is `web\...`, and there is no `data\` anywhere.
+- **The repo does not track runtime data**: the only JSON files in `git ls-files` are
+  `web/i18n/*.json`; `data/` is entirely in `.gitignore`.
+- **The configuration ships no built-in defaults**: `load_config()` returns an empty
+  dict when nothing is on disk, and the game folder, download folders and Script Merger
+  location are all detected live.
+- **Counter-experiment**: build a fake game folder containing only `modFakeAlpha` and
+  `modFakeBeta`, point `WAASS_GAME_DIR` at it and cold start → the API returns exactly
+  2 mods. None of the 20 real ones appear, which proves the list comes from scanning.
+- **Why copying the exe into an empty folder on the same machine instantly shows every
+  mod**: because the game is on that machine, and both detection and scanning happen on
+  the spot. That is the design, not leftover data.
+
+### 32.2 Permissions (the most likely thing to break on someone else's PC)
+
+Steam installs the game under `C:/Program Files (x86)` by default, which a normal user
+can only read. Previously the first symptom was `PermissionError: [WinError 5]` at the
+moment the user clicked install — which is meaningless to a non-technical user.
+
+- `paths.dir_writable(dir)`: opens the directory itself with `CreateFileW` using
+  `FILE_ADD_FILE` (plus `FILE_FLAG_BACKUP_SEMANTICS`, without which directories cannot
+  be opened at all) and lets Windows evaluate the ACL. **No file is ever created** — the
+  game folder is not touched in any way.
+- The self-check gained `game_readonly` (amber banner) with `params.path`, raised only
+  when writing really is impossible.
+- The API layer gained `_err(exc)`: `PermissionError` → `srv.need_admin`,
+  `FileNotFoundError` → `srv.file_gone`, both with a stable `code`. **A raw
+  `type: str(e)` is never returned to the UI again.**
+
+### 32.3 Everything else that was checked
+
+| Item | Result |
+| --- | --- |
+| Chinese / space-containing paths | Pass (built `中文 路径\巫师3` under `_work`; scanning works) |
+| Clean install with no `mods\` folder | Pass (0 mods, no error) |
+| No 7-Zip / WinRAR / Bandizip | `.zip` uses the standard library; `.7z`/`.rar` reports "unsupported" and points at the missing tool |
+| Network unavailable | Every `urlopen` has a timeout (4 call sites); Nexus / translation failures only affect their own panel |
+| Edge / Chrome outside the standard paths | Detection also probes `%LOCALAPPDATA%`; if none is found it falls back to the system default browser |
+| No pywebview | Falls back to a `--app` window; then to the default browser |
+| exe in an unwritable location (Program Files) | `data/` automatically moves to `%LOCALAPPDATA%\WaassModManager` |
+| Read-only data folder / data from a newer build | Read-only mode, red banner, not a single byte written |
+
+### 32.4 Policy
+
+The pre-release checklist must contain these three lines: **no `data/` in the build**,
+**no author-machine paths in source or docs**, **plain language when permission is
+denied**.

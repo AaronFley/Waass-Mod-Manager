@@ -2138,3 +2138,55 @@ HTTP 层验证六种时序全过；真机连切两次语言 + 跨宽限期开面
 范围：`web/static/guide.html` + `guide.en.html`、`README.md` + `README.en.md`、
 `CHANGELOG.md` + `CHANGELOG.en.md`、`docs/SPEC.md` + `docs/SPEC.en.md`。
 只改一边等于给另一半用户留了个错说明，比不写更糟。
+
+## 32. 陌生人环境复查（发版前，2026-10-30）
+
+判据：**把 exe 交给一个和你毫无关系的玩家，他的机器上不能有任何「只在作者机器上
+成立」的假设。** 逐项查过，结论与对策如下。
+
+### 32.1 「程序里是不是塞了我的数据」（用户的质疑，必须自证）
+
+- **打包产物只含 Python 标准库与 `web/`**。核对方式：看
+  `build/Waass-<版本>/PKG-00.toc`，来自项目目录的条目全部是 `web\...`，
+  没有任何 `data\`。
+- **仓库不跟踪运行时数据**：`git ls-files` 里只有 `web/i18n/*.json` 是 json，
+  `data/` 全在 `.gitignore`。
+- **配置没有内置默认值**：`load_config()` 读不到就是空 dict，游戏目录、下载
+  目录、Script Merger 位置全部现场探测。
+- **反证实验**：造一个只有 `modFakeAlpha` / `modFakeBeta` 的假游戏目录，
+  `WAASS_GAME_DIR` 指过去冷启动 → 接口返回模组数正好 2。真机那 20 个一个都
+  没出现，证明列表是扫盘得来的。
+- **为什么同一台机器上复制 exe 到空文件夹会「秒出全部模组」**：因为游戏就在
+  这台机器上，探测与扫描都是当场做的。这正是设计意图，不是残留数据。
+
+### 32.2 权限（最容易在别人机器上炸的一条）
+
+Steam 默认把游戏装在 `C:/Program Files (x86)`，普通用户对那里只读。原来只有
+在用户点「安装」时才撞 `PermissionError: [WinError 5] 拒绝访问`，而那句话对
+零基础用户等于天书。
+
+- `paths.dir_writable(dir)`：用 `CreateFileW` 以 `FILE_ADD_FILE`（+ 
+  `FILE_FLAG_BACKUP_SEMANTICS` 才打得开目录）打开目录本身，让系统算一遍 ACL。
+  **全程不创建任何文件** —— 游戏目录一根汗毛都不动。
+- 自检新增 `game_readonly`（黄条）：`params.path`。只在真的写不进去时出现。
+- 接口层 `_err(exc)`：`PermissionError` → `srv.need_admin`，`FileNotFoundError`
+  → `srv.file_gone`，并带稳定 `code`（`need_admin` / `file_gone`）。
+  **不再把 `type: str(e)` 原样返回给界面。**
+
+### 32.3 其他复查项
+
+| 项 | 结论 |
+| --- | --- |
+| 中文 / 空格路径 | 通过（`_work` 里造 `中文 路径\巫师3`，扫描正常） |
+| 干净的、没有 `mods\` 目录的安装 | 通过（0 个模组，不报错） |
+| 没有 7-Zip / WinRAR / Bandizip | `.zip` 走标准库；`.7z`/`.rar` 报「不支持的格式」并指向缺失工具 |
+| 网络不可用 | 所有 `urlopen` 都带 timeout（4 处）；Nexus / 翻译失败只影响该面板 |
+| Edge / Chrome 不在标准位置 | 探测补上 `%LOCALAPPDATA%`；全都没有则退回系统默认浏览器 |
+| 无 pywebview | 退回 `--app` 独立窗口；再不行退回默认浏览器 |
+| exe 放在不可写位置（Program Files） | `data/` 自动落到 `%LOCALAPPDATA%\WaassModManager` |
+| 数据目录只读 / 数据来自更新版本 | 只读模式，红条说明，不写一个字节 |
+
+### 32.4 纪律
+
+发布前复查清单里必须有这三条：**打包产物里没有 `data/`**、**源码与文档里没有
+作者本机路径**、**权限不足时界面说人话**。

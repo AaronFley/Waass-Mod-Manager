@@ -177,6 +177,17 @@
       <li><b>Need the disk space</b>: Settings → Storage &amp; cleanup. Core data
         (configuration, Nexus records, groups, install records, save game backups,
         localization originals) is never cleaned up.</li>
+      <li><b>Installing, enabling or localizing keeps failing</b>: it's almost always
+        permissions. Steam installs the game under
+        <code>C:\Program Files (x86)\Steam\steamapps\common\The Witcher 3</code> by
+        default, and that path is read-only for a normal user. Close the app, then
+        right-click → "Run as administrator" and try again. If the app finds the game
+        folder unwritable at launch, it says so in an amber banner up front.</li>
+      <li><b>Moved to another PC</b>: copy the whole program folder and it just works —
+        your data lives in <code>data\</code> next to the exe. On a machine without the
+        game, it asks you to pick the game folder and everything else keeps working.
+        The mod list always comes from the folder you point it at; the program ships
+        with none of your previous machine's data.</li>
     </ul>
   </section>
 

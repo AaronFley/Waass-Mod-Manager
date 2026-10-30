@@ -236,6 +236,21 @@ def _json(data, status=200):
         data, ensure_ascii=False).encode("utf-8")
 
 
+def _err(exc: Exception, code: str = "unexpected") -> dict:
+    """把异常变成界面能看懂的一句话。
+
+    最常见的一种是权限不足：游戏装在 `C:\\Program Files (x86)\\Steam` 时，
+    写 `mods/` 需要管理员。以前直接把 `PermissionError: [WinError 5] 拒绝访问`
+    甩给用户，等于什么都没说 —— 他既不知道该干什么，也看不懂。
+    """
+    if isinstance(exc, PermissionError):
+        return {"error": i18n.t("srv.need_admin"), "code": "need_admin"}
+    if isinstance(exc, FileNotFoundError):
+        return {"error": i18n.t("srv.file_gone", path=getattr(exc, "filename", "") or ""),
+                "code": "file_gone"}
+    return {"error": f"{type(exc).__name__}: {exc}", "code": code}
+
+
 def _engine_rows() -> tuple[list[dict], dict]:
     """翻译引擎的现状：能不能用、为什么不能用、配了几个 Key。
 
@@ -591,7 +606,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 data = storage.report()
             except Exception as e:                       # noqa: BLE001
-                return self._send(*_json({"error": f"{type(e).__name__}: {e}"}, 500))
+                return self._send(*_json(_err(e), 500))
             return self._send(*_json(data))
 
         if path == "/api/library":
@@ -628,7 +643,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 rows = localize.catalog(root, [m.key for m in res.visible_mods()])
             except Exception as e:                   # noqa: BLE001
-                return self._send(*_json({"error": f"{type(e).__name__}: {e}"}, 500))
+                return self._send(*_json(_err(e), 500))
             engines, cfg = _engine_rows()
             return self._send(*_json({
                 "mods": rows,
@@ -778,7 +793,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 jobs = localize.build_jobs(root, [str(k) for k in keys] if keys else None)
             except Exception as e:                   # noqa: BLE001
-                return self._send(*_json({"error": f"{type(e).__name__}: {e}"}, 500))
+                return self._send(*_json(_err(e), 500))
             return self._send(*_json({
                 "count": jobs["count"], "file": jobs["file"],
                 "items": jobs["items"][:4],
@@ -806,7 +821,7 @@ class Handler(BaseHTTPRequestHandler):
             except guard.WriteDenied as e:
                 return self._send(*_json({"error": i18n.t("srv.write_denied", err=e)}, 403))
             except Exception as e:                   # noqa: BLE001
-                return self._send(*_json({"error": f"{type(e).__name__}: {e}"}, 500))
+                return self._send(*_json(_err(e), 500))
             if res.get("changed"):
                 STATE.refresh()
             return self._send(*_json(res))
@@ -825,7 +840,7 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as e:
                 return self._send(*_json({"error": str(e)}, 400))
             except Exception as e:                   # noqa: BLE001
-                return self._send(*_json({"error": f"{type(e).__name__}: {e}"}, 500))
+                return self._send(*_json(_err(e), 500))
             return self._send(*_json(job))
 
         if path == "/api/localize/job/cancel":
@@ -850,7 +865,7 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as e:
                 return self._send(*_json({"error": str(e)}, 400))
             except Exception as e:                   # noqa: BLE001
-                return self._send(*_json({"error": f"{type(e).__name__}: {e}"}, 500))
+                return self._send(*_json(_err(e), 500))
             if res.get("changed"):
                 STATE.refresh()
             return self._send(*_json(res))
@@ -868,7 +883,7 @@ class Handler(BaseHTTPRequestHandler):
             except guard.WriteDenied as e:
                 return self._send(*_json({"error": i18n.t("srv.write_denied", err=e)}, 403))
             except Exception as e:                   # noqa: BLE001
-                return self._send(*_json({"error": f"{type(e).__name__}: {e}"}, 500))
+                return self._send(*_json(_err(e), 500))
             if res.get("restored"):
                 STATE.refresh()
             return self._send(*_json(res))
@@ -877,7 +892,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 translate.save_config(body or {})
             except Exception as e:                   # noqa: BLE001
-                return self._send(*_json({"error": f"{type(e).__name__}: {e}"}, 400))
+                return self._send(*_json(_err(e), 400))
             engines, cfg = _engine_rows()
             return self._send(*_json({"ok": True, "engines": engines,
                                       "engine_order": cfg.get("order") or []}))
@@ -887,7 +902,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 rows = translate.probe()
             except Exception as e:                   # noqa: BLE001
-                return self._send(*_json({"error": f"{type(e).__name__}: {e}"}, 500))
+                return self._send(*_json(_err(e), 500))
             return self._send(*_json({"ok": True, "engines": rows}))
 
         if path == "/api/localize/history":
@@ -1259,7 +1274,7 @@ class Handler(BaseHTTPRequestHandler):
             except guard.WriteDenied as e:
                 return self._send(*_json({"error": i18n.t("srv.write_denied_action", err=e)}, 403))
             except Exception as e:                       # noqa: BLE001 解压类错误统一露出
-                return self._send(*_json({"error": f"{type(e).__name__}: {e}"}, 500))
+                return self._send(*_json(_err(e), 500))
             return self._send(*_json(res))
 
         if path in ("/api/uninstall", "/api/restore"):
@@ -1324,7 +1339,7 @@ class Handler(BaseHTTPRequestHandler):
             except FileNotFoundError as e:
                 return self._send(*_json({"error": str(e)}, 400))
             except OSError as e:
-                return self._send(*_json({"error": f"{type(e).__name__}: {e}"}, 500))
+                return self._send(*_json(_err(e), 500))
             return self._send(*_json(res))
 
         if path == "/api/pick-file":

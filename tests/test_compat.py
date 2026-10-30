@@ -160,6 +160,31 @@ def main() -> int:
     check("报数据目录不可写", "data_unwritable" in codes, str(codes))
     shutil.rmtree(real, ignore_errors=True)
 
+    print("[9] 游戏目录写不进去（装在 Program Files）要提前说")
+    game = _BOX / "game"
+    (game / "bin" / "x64").mkdir(parents=True, exist_ok=True)
+    (game / "bin" / "x64" / "witcher3.exe").write_bytes(b"MZ")
+    (game / "mods").mkdir(exist_ok=True)
+    reset(data={"schema": 3, "app": "1.2.9"},
+          files={"config.json": json.dumps({"game_root": str(game)})})
+    real_probe = selfcheck.dir_writable
+    selfcheck.dir_writable = lambda _p: False        # 假装 ACL 不让写
+    try:
+        rep7 = selfcheck.run("1.2.9")
+    finally:
+        selfcheck.dir_writable = real_probe
+    codes = [i["code"] for i in rep7["items"]]
+    check("报游戏目录不可写", "game_readonly" in codes, str(codes))
+    check("是警告（黄条）不是错误", rep7["level"] == "warn", rep7["level"])
+    check("明细里如实记 writable=False",
+          rep7["detail"].get("game_root", {}).get("writable") is False,
+          str(rep7["detail"].get("game_root")))
+
+    reset(data={"schema": 3, "app": "1.2.9"},
+          files={"config.json": json.dumps({"game_root": str(game)})})
+    rep8 = selfcheck.run("1.2.9")
+    check("能写的时候不打扰", "game_readonly" not in [i["code"] for i in rep8["items"]])
+
     print(f"\n通过 {PASS} 项，失败 {FAIL} 项")
     return 0 if FAIL == 0 else 1
 

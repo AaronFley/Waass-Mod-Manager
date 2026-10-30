@@ -26,7 +26,7 @@ import time
 from pathlib import Path
 
 from . import compat, guard
-from .paths import CONFIG_FILE, DATA_DIR
+from .paths import CONFIG_FILE, DATA_DIR, dir_writable
 
 CHECK_FILE = DATA_DIR / "selfcheck.json"
 KEEP_HISTORY = 10
@@ -79,12 +79,31 @@ def _data_checks() -> tuple[dict, list[dict]]:
     # 配过的游戏目录还在不在（不在不是错误：用户可能把游戏挪了，
     # 程序会重新探测，这里只是提前说一声，省得他以为是扫描坏了）
     root = str((cfg or {}).get("game_root") or "").strip()
+    if not root:
+        # 从没保存过配置也能查到：探测结果是缓存的，后面扫描本来就要用，
+        # 这里先问一次不额外花时间。查不到就当没有，绝不能因此报错。
+        try:
+            from .paths import detect_game_root
+            found = detect_game_root()
+            root = str(found) if found else ""
+        except Exception:                       # noqa: BLE001
+            root = ""
     if root:
         exists = Path(root).is_dir()
-        detail["game_root"] = {"path": root, "exists": exists}
+        detail["game_root"] = {"path": root, "exists": exists, "writable": None}
         if not exists:
             items.append({"code": "game_gone", "level": "warn",
                           "params": {"path": root}})
+        else:
+            # 游戏目录能不能写。Steam 默认装在 Program Files (x86)，那里对普通
+            # 用户只读；不提前说，用户点「安装/启用/汉化」时才撞 WinError 5。
+            # 只问权限不落文件，见 paths.dir_writable 的说明。
+            target = Path(root) / "mods"
+            ok = dir_writable(target if target.is_dir() else Path(root))
+            detail["game_root"]["writable"] = ok
+            if not ok:
+                items.append({"code": "game_readonly", "level": "warn",
+                              "params": {"path": root}})
 
     # 更新源配得对不对（有配但不像个网址 = 一定连不上）
     feed = str((cfg or {}).get("update_feed") or "").strip()

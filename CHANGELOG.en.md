@@ -40,9 +40,26 @@ launch checks itself, speaking up in the top banner when something needs saying.
   through the server.
 - The allow-list for opening links grew to include `github.com` (previously
   nexusmods only); every other domain is still refused.
-- New `tests/test_compat.py` (31 checks: fresh install / legacy migration / broken
+- **Unfamiliar-machine audit (done before going public)**:
+  - New startup check for "can the game folder be written". It only asks about
+    permission and **writes nothing into the game folder** (it opens the directory
+    itself with `CreateFileW` and lets Windows evaluate the ACL). Steam installs the
+    game under `C:\Program Files (x86)` by default, which a normal user cannot write
+    to — previously the user only hit `WinError 5` after clicking install; now an
+    amber banner says "run as administrator" up front.
+  - Permission errors on every endpoint are now one plain sentence
+    (`srv.need_admin`) instead of a raw `PermissionError: [WinError 5]`; a missing
+    file gets its own message too.
+  - Browser detection now also covers Edge / Chrome installed under the user profile
+    (`%LOCALAPPDATA%`).
+  - Re-verified: the packaged exe contains only the Python standard library and
+    `web/`, **no `data/` of any kind**; no author-machine paths in source, frontend or
+    docs; the configuration ships no built-in defaults (everything is detected live);
+    Chinese / space-containing paths, a clean install with no `mods` folder, a machine
+    without any archive tool, and a dead network all have working fallbacks.
+- New `tests/test_compat.py` (35 checks: fresh install / legacy migration / broken
   file quarantine / idempotency / read-only downgrade / just-updated / post-update
-  data problems / unwritable data folder).
+  data problems / unwritable data folder / unwritable game folder).
 - **Policy**: from this release on, any feature addition, removal or behaviour change
   **must update both the Chinese and the English documentation** (built-in guide,
   README, CHANGELOG, SPEC). Recorded in `docs/SPEC.md` §31.
