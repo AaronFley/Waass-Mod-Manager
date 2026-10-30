@@ -64,6 +64,12 @@ launch checks itself, speaking up in the top banner when something needs saying.
   **must update both the Chinese and the English documentation** (built-in guide,
   README, CHANGELOG, SPEC). Recorded in `docs/SPEC.md` §31.
 
+- **Wording fix**: the English UI called the remastered edition "(next-gen)",
+  which contradicted the Chinese "重制版" and read like a different product.
+  It is now **The Witcher 3 Remastered** throughout — settings, README, the
+  built-in guide, the Nexus page copy and the SPEC. `NEXT-GEN` inside real mod
+  package names is untouched, because that is the mod's own title.
+
 ## 1.2.8 — 2026-10-30
 
 **The interface now speaks English.** A new button in the top bar ("EN" while in
@@ -145,7 +151,7 @@ It started after cleaning out RMMR: covers, authors, and update checks all stopp
 - **Automatic sync at startup was silently skipped.** The entry point had `if (!S.mods.some(m => m.nexus_id)) return;` — a new user has no IDs, so no request was even sent, making it look like "this feature was never implemented". Now candidates are fetched even with no IDs, and the UI says so clearly.
 - **Disabled mods (folders with the `~` prefix) couldn't see candidates.** The server keyed by `folder`, while the UI looked up by the `~`-stripped `key` — the two never matched.
 - **Some mods never found any candidates.** Nexus's name search is "basically all words must hit"; the more words, the likelier nothing comes back: `auto loot enhanced` finds nothing, but relaxed to `auto loot` it returns six. The old code sent only one all-words query, so names like `AutoLoot Enhanced` ("feature word + adjective") always came back empty. Now the query relaxes tier by tier — full name → drop filler words → first two words → first word — and uses whichever tier finds results first.
-- **The real match was kept out of the candidates.** Filler words and version prefixes like `enhanced`, `plus`, `redux`, `V1.1.7` were counted as "extra words" and penalized; `AutoLoot Enhanced` against `SmartAutoLoot Remaster V1.1.7` was penalized below the threshold. "Extra words" now ignores filler words, but **"differs by words" still counts `remaster`** — next-gen versions sometimes really do get a separate page, and that difference must not be erased.
+- **The real match was kept out of the candidates.** Filler words and version prefixes like `enhanced`, `plus`, `redux`, `V1.1.7` were counted as "extra words" and penalized; `AutoLoot Enhanced` against `SmartAutoLoot Remaster V1.1.7` was penalized below the threshold. "Extra words" now ignores filler words, but **"differs by words" still counts `remaster`** — the Remastered edition sometimes really does get a separate page, and that difference must not be erased.
 - **Candidate buttons were squeezed into a vertical stack.** Candidates used to live in the main content column (which is only 230px wide), so four buttons stacked one per row with names truncated into ellipses. They now get a full-width row laid out horizontally.
 - The top banner used to show either "new version available" or "not matched on Nexus" — the latter was always covered. Now they show side by side.
 
@@ -164,7 +170,7 @@ The conflict panel only recognized `Merger` in the game root folder. New users w
 
 - When it isn't installed, two buttons appear: **Download from Nexus** (pointing to [mods/13076](https://www.nexusmods.com/witcher3/mods/13076)) and **I've installed it, pick the location** (native file picker, select its exe).
 - The chosen path is saved as `merger_exe` in `config.json` and used directly next time; the button becomes "back to auto-detect".
-- A note is included: **mods built for the next-gen version generally don't need merging**; you only need it when running many legacy mods, or when the game reports script errors at launch.
+- A note is included: **mods built for the Remastered version generally don't need merging**; you only need it when running many legacy mods, or when the game reports script errors at launch.
 - If the chosen exe's name doesn't contain `merger` / `script`, a gentle "doesn't look quite right" note appears, but it isn't blocked.
 
 ### Added: user guide (Settings → User guide)

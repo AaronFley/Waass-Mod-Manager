@@ -2143,7 +2143,7 @@ Measured scores and verdicts (21 mods on the machine):
 2. **Loose word scoring misbinds.** `UIRE_AlwaysQuestMarks` and `All Quest
    Markers On Map` share only the word `quest`; even Jaccard gave 59 and it was
    the sole top score → misbind. A "coverage ≥ 60%" guard was added to block it.
-3. **`_LANG_WORDS` must never contain `remaster`.** Most next-gen body mods carry
+3. **`_LANG_WORDS` must never contain `remaster`.** Most Remastered body mods carry
    that word (`UI Remastered Edition` / `SeamlessAdaptiveHUDRemastered`);
    including it scores every body mod −45 as a "translation", recognizing
    nothing. Two-letter codes keep only `cn/ru/pl/fr`; `it`/`de`/`es` are normal
@@ -2176,7 +2176,7 @@ Measured scores and verdicts (21 mods on the machine):
      (`isdigit()` only matches pure digits; `V1` would survive otherwise) so
      they aren't taken as real words.
    - But when **counting differing words, `remaster` still counts**
-     (`_FILLER_BIND` excludes it from filler): next-gen editions sometimes
+     (`_FILLER_BIND` excludes it from filler): the Remastered edition sometimes
      really do get a separate page; erasing this difference auto-binds wrongly.
 
 ### Ordering: evidence tier before score
@@ -2468,6 +2468,13 @@ was numbers that mismatched; this time, colors and semantics.
    English placeholder missing from Chinese is an error, an English omission of
    a Chinese placeholder is a warning. `tests/test_i18n.py` checks key parity,
    empty values and CJK leftovers in English.
+7. **Proper nouns must line up across the two languages** — one side may not use a
+   second, informal name for the same thing. Settled: the game edition is 中文
+   「重制版」/ English **The Witcher 3 Remastered** (before 1.2.9 the English said
+   `(next-gen)`, which names a different thing and has been corrected).
+   Careful: **`NEXT-GEN` inside real mod package names is the mod's own title and
+   must not be touched** — the `remaster` matching logic in `core/identify.py`
+   exists precisely because of those names.
 
 ### Documentation
 

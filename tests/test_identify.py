@@ -184,7 +184,7 @@ def main() -> int:
         check("enhanced 不算差异",
               identify._word_diff("AutoLoot Enhanced", "SmartAutoLoot Remaster") == 2,
               identify._word_diff("AutoLoot Enhanced", "SmartAutoLoot Remaster"))
-        check("remaster 仍算差异（次世代可能另开页面）",
+        check("remaster 仍算差异（重制版可能另开页面）",
               identify._word_diff("Hoods", "Hoods Remastered") == 1,
               identify._word_diff("Hoods", "Hoods Remastered"))
         check("泛词不再把分数扣到候选线以下",

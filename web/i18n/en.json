@@ -754,7 +754,7 @@
   "set.freed": "Freed {size}",
   "set.freed_none": "Nothing could be freed (the files may be in use)",
   "set.game_dir_updated": "Game folder updated",
-  "set.game_name": "The Witcher 3 (next-gen)",
+  "set.game_name": "The Witcher 3 Remastered",
   "set.guide_fail_hint": "{msg}. Other features are unaffected.",
   "set.guide_load_fail": "Could not load the guide ({code})",
   "set.guide_note": "What every feature does and what the markers in the UI mean. Worth reading once before you start.",

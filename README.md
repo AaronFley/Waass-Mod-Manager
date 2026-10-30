@@ -1,6 +1,6 @@
 # Waass Mod Manager
 
-《巫师 3：狂猎》次世代版的轻量模组管理器。只用标准库、只动该动的地方、每一步都能撤销。
+《巫师 3：狂猎》重制版的轻量模组管理器。只用标准库、只动该动的地方、每一步都能撤销。
 
 ![主界面](docs/screenshots/1.2.5/01-dark-main.png)
 
@@ -15,7 +15,7 @@
 | | |
 | --- | --- |
 | 系统 | **Windows 10 / 11（64 位）** |
-| 游戏 | 《巫师 3：狂猎》次世代版 **v5.x**（Steam / GOG / Epic 均可） |
+| 游戏 | 《巫师 3：狂猎》重制版 **v5.x**（Steam / GOG / Epic 均可） |
 | 界面 | 系统自带的 Microsoft Edge，或已安装的 Google Chrome |
 
 《巫师 3》没有 Linux / macOS 版，所以本程序也只支持 Windows —— 在别的系统上

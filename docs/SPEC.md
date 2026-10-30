@@ -1773,7 +1773,7 @@ Host 校验不影响它，但如果以后有人想给写接口加「必须带 `X
 2. **词级打分太松会乱绑**。`UIRE_AlwaysQuestMarks` 和 `All Quest Markers On Map`
    只共用 `quest` 一个词，按 Jaccard 也能拿 59 分并成为唯一最高分 → 绑错。
    加了「覆盖率 ≥ 60%」才挡住。
-3. **`_LANG_WORDS` 绝不能收 `remaster`**。次世代版本体 mod 大多带这个词
+3. **`_LANG_WORDS` 绝不能收 `remaster`**。重制版本体 mod 大多带这个词
    （`UI Remastered Edition` / `SeamlessAdaptiveHUDRemastered`），收进去等于
    把所有本体当翻译版扣 45 分，一个都认不出。两个字母的只留 `cn/ru/pl/fr`，
    `it`/`de`/`es` 在英文标题里是正常词（`Everything is on it`）。
@@ -1799,7 +1799,7 @@ Host 校验不影响它，但如果以后有人想给写接口加「必须带 `X
    - `V1.1.7` 这种版本前缀在 `tokenize()` 里就丢掉（`isdigit()` 只认纯数字，
      `V1` 拦不住），否则它会被当成一个真实单词。
    - 但**算「差几个词」时 `remaster` 仍要算**（`_FILLER_BIND` 把它剔出来）：
-     次世代版有时真的另开了一个页面，这条差异抹掉就会自动绑错。
+     重制版有时真的另开了一个页面，这条差异抹掉就会自动绑错。
 
 ### 排序：证据等级在分数之前
 
@@ -2039,6 +2039,11 @@ HTTP 层验证六种时序全过；真机连切两次语言 + 跨宽限期开面
 6. 新键走 `tools/i18n_merge.py` 合并：键冲突报错、en 多出 zh 没有的占位符
    报错、en 省略占位符警告。`tests/test_i18n.py` 查键集合一致、无空值、
    英文无中文残留。
+7. **专有名词双语必须对齐**，不能一边是玩家习惯的另一套叫法。已定：
+   游戏版本 = 中文「重制版」/ 英文 **The Witcher 3 Remastered**（1.2.9 之前
+   英文写成 `(next-gen)`，与中文的「重制版」不是一回事，已改）。
+   注意区分：**真实 mod 包名里的 `NEXT-GEN` 是模组自己的标题，不许动**
+   —— `core/identify.py` 的 `remaster` 判重逻辑正是围绕这些名字写的。
 
 ### 文档口径
 

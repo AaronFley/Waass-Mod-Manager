@@ -1,6 +1,6 @@
 # Waass Mod Manager
 
-A lightweight mod manager for The Witcher 3: Wild Hunt (next-gen). Standard library only, touches only what it must, and every step can be undone.
+A lightweight mod manager for The Witcher 3 Remastered. Standard library only, touches only what it must, and every step can be undone.
 
 ![Main window](docs/screenshots/1.2.5/01-dark-main.png)
 
@@ -18,7 +18,7 @@ A lightweight mod manager for The Witcher 3: Wild Hunt (next-gen). Standard libr
 | | |
 | --- | --- |
 | OS | **Windows 10 / 11 (64-bit)** |
-| Game | The Witcher 3: Wild Hunt next-gen **v5.x** (Steam / GOG / Epic all work) |
+| Game | The Witcher 3 Remastered **v5.x** (Steam / GOG / Epic all work) |
 | UI | The bundled Microsoft Edge, or an installed Google Chrome |
 
 The Witcher 3 has no Linux / macOS version, so this tool is Windows-only — on other systems it fails at the import stage with an error instead of showing a half-broken UI.

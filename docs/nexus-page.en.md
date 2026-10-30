@@ -6,7 +6,7 @@ Intro text for the Nexus Mods page. **Plain text throughout, no markup of any ki
 
 Waass Mod Manager
 
-A mod manager for The Witcher 3: Wild Hunt (next-gen). A single 9 MB exe, double-click and it works. No installation, no .NET, no other manager required.
+A mod manager for The Witcher 3 Remastered. A single 9 MB exe, double-click and it works. No installation, no .NET, no other manager required.
 
 · WHAT IT IS
 
@@ -38,7 +38,7 @@ The background server listens on 127.0.0.1 only, the UI and backend authenticate
 
 · SYSTEM REQUIREMENTS
 
-Windows 10 / 11 (64-bit). The Witcher 3 next-gen v5.x, Steam / GOG / Epic all accepted. The UI uses the bundled Microsoft Edge or an installed Chrome — no separate browser needed.
+Windows 10 / 11 (64-bit). The Witcher 3 Remastered v5.x, Steam / GOG / Epic all accepted. The UI uses the bundled Microsoft Edge or an installed Chrome — no separate browser needed.
 
 · GETTING STARTED
 

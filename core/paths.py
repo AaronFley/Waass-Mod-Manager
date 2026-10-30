@@ -105,7 +105,7 @@ _CANDIDATES = [
 
 _STEAM_COMMON = Path("steamapps") / "common"
 _STEAM_GAME_DIRS = ("The Witcher 3", "The Witcher 3 GOTY")
-_GOG_IDS = ("1495134320",)          # 巫师3 的 GOG gameID（次世代版）
+_GOG_IDS = ("1495134320",)          # 巫师3 的 GOG gameID（重制版）
 
 # 探测会读注册表和几个清单文件，比纯 is_dir 贵得多。而它每次 /api/state 都会
 # 被问到，所以缓存一下；目录被删/被挪时靠 is_game_root 复验兜回来。

@@ -8,7 +8,7 @@ Description 编辑器、粘进 GitHub、粘进任何地方都是这个样子，�
 
 Waass Mod Manager
 
-《巫师 3：狂猎》次世代版的模组管理器。一个 9 MB 的单文件 exe，双击就能用，
+《巫师 3：狂猎》重制版的模组管理器。一个 9 MB 的单文件 exe，双击就能用，
 不需要安装，不需要 .NET，不需要别的管理器。
 
 · 它是什么
@@ -66,7 +66,7 @@ data/snapshots/，游戏正在运行（witcher3.exe 在跑）时直接拒绝写�
 
 · 系统要求
 
-Windows 10 / 11（64 位）。巫师 3 次世代版 v5.x，Steam / GOG / Epic 都认。
+Windows 10 / 11（64 位）。巫师 3 重制版 v5.x，Steam / GOG / Epic 都认。
 界面用系统自带的 Microsoft Edge 或已安装的 Chrome，不需要额外装浏览器。
 
 · 怎么开始

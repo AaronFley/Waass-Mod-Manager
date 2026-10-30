@@ -44,7 +44,7 @@ _LANG_WORDS = {
     "cn", "ru", "pl", "fr",
 }
 # 注意两件事：
-# 1. 绝不能收录 "remaster" —— 次世代版的本体 mod 大多带这个词
+# 1. 绝不能收录 "remaster" —— 重制版的本体 mod 大多带这个词
 #    （UI Remastered Edition / SeamlessAdaptiveHUDRemastered），收了就把本体
 #    当翻译版扣分，全认不出。
 # 2. 两个字母的词只留 cn/ru/pl/fr。`it`、`de`、`es` 在英文标题里是正常词
@@ -68,7 +68,7 @@ _FILLER = {
     "v",
 }
 
-# 判「是不是同一个 mod」时，`remaster` 不能当包装词丢掉：次世代版有时真的
+# 判「是不是同一个 mod」时，`remaster` 不能当包装词丢掉：重制版有时真的
 # 另开了一个页面。只有在算「多出来的词扣多少分」时才把它抹平。
 _FILLER_BIND = _FILLER - {"remaster", "remastered"}
 
