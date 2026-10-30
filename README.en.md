@@ -4,8 +4,14 @@ A lightweight mod manager for The Witcher 3: Wild Hunt (next-gen). Standard libr
 
 ![Main window](docs/screenshots/1.2.5/01-dark-main.png)
 
-> **Recent update (1.2.7)**: fixed a long-standing issue where the UI window closed but the background process kept running. Exit no longer relies solely on the goodbye signal sent when the page closes — the server now checks the OS directly for a visible window, and shuts itself down when the window is gone. Also corrected three statements in the built-in guide that no longer matched the code (banner colors, load order semantics, supported archive formats). Previous release (1.2.6): mods can identify their own Nexus page, disabling is done by adding a `~` prefix to the folder name, and Script Merger gained a download link plus a "pick the exe" guide.
-> Full history: [CHANGELOG.md](CHANGELOG.md) (in Chinese).
+> **Recent update (1.2.9)**: upgrading is now just "swap the exe". A new build backs
+> up your existing data in full before migrating it, renames unreadable files instead
+> of deleting them, and runs a self-check on every launch — program updates and data
+> problems are reported right in the top banner (red ones can't be dismissed).
+> Previous release (1.2.8): the interface speaks English, one-click toggle, roughly
+> 960 strings bilingual, native English docs. Earlier (1.2.7): fixed the background
+> process that survived a closed window.
+> Full history: [CHANGELOG.md](CHANGELOG.md) (Chinese) · [CHANGELOG.en.md](CHANGELOG.en.md).
 
 ## System requirements
 
@@ -49,6 +55,33 @@ python run.py --serve-only start the server only, for debugging
 python run.py --port 8765  use a specific port
 ```
 
+## Upgrading
+
+**A new version means one thing: overwrite the old exe and double-click it.**
+Your `data/` folder stays exactly as it is — mod list, groups, Nexus IDs, install
+records, localization originals and save game backups all live there, and the new
+build picks them up as they are. No export, no import, no manual file shuffling.
+
+Every launch starts with a self-check:
+
+- **Did the version just change?** The app answers the question that actually matters:
+  "existing data checked out (N files read fine)", or exactly which items failed to
+  read and what they're called.
+- **When the data format needs upgrading**, a complete copy is made to
+  `data/_backup/pre-schema…/` <i>before</i> anything is touched. To roll back, copy
+  those files into `data/` again.
+- **A damaged data file** (power loss, hand-edited JSON with a missing brace) is renamed
+  to `xxx.json.broken-<timestamp>` and **kept, never deleted**. The app carries on as if
+  that record were missing and rebuilds it.
+- **Going back to an older build**: if the data was written by a newer version, the app
+  switches to **read-only** — everything stays browsable, but not a single byte is
+  written, so an older build can't force its idea of the schema onto newer data.
+
+The result shows up in the top banner (green / amber / red). Green and amber can be
+dismissed with "Got it"; **red cannot** — it means your data needs attention and you
+need to know why. Settings → About shows "Data format: vX (program supports vY)" and
+offers a "Run check" button.
+
 ## First launch
 
 The program locates your game folder on its own: it reads the Steam library index (multiple libraries on multiple drives are handled), the GOG registry, and Epic's install manifests. Only if all three fail does it fall back to a few common default locations.
@@ -57,7 +90,7 @@ If it still can't find the game, the main area explains which level to pick — 
 
 ## Built-in guide
 
-The program ships with one: **Settings → Guide**. Nine sections, from first launch to troubleshooting. It explains the reasoning, not just button positions (why disabling renames a folder, which `Priority` number wins, why an uncertain Nexus ID is left blank rather than guessed).
+The program ships with one: **Settings → Guide**. Ten sections, from first launch through upgrading, your data and troubleshooting. It explains the reasoning, not just button positions (why disabling renames a folder, which `Priority` number wins, why an uncertain Nexus ID is left blank rather than guessed).
 
 ![Guide](docs/screenshots/1.2.6/01-guide.png)
 
@@ -229,6 +262,9 @@ The program also curbs its own growth without any manual attention:
   (measured: 12 MB after a launch → 2 MB after exit, keeping only the theme preference);
 - Snapshots keep the most recent 30; older ones are pruned on the next write;
 - Translation backups keep the most recent 20;
+- Pre-upgrade data backups live in `data/_backup/pre-schema…/`; they are only created when
+  the data format really needs migrating (rare) and are never auto-cleaned — that is the
+  one thing you can roll everything back from, so delete them yourself if you must;
 - The undo log caps at 200 entries; the crash log keeps only the latest run (overwrite, not append).
 
 ### About the built-in translation tool

@@ -26,7 +26,8 @@ KEEP_MAX = 200          # 最多记这么多条，防止文件无限长大
 
 
 def _blank() -> dict:
-    return {"dismissed_warns": [], "dismissed_dl": "", "dismissed_upd": ""}
+    return {"dismissed_warns": [], "dismissed_dl": "", "dismissed_upd": "",
+            "dismissed_self": ""}
 
 
 def load() -> dict:
@@ -40,7 +41,7 @@ def load() -> dict:
     warns = raw.get("dismissed_warns")
     if isinstance(warns, list):
         out["dismissed_warns"] = [str(x) for x in warns if isinstance(x, str)]
-    for k in ("dismissed_dl", "dismissed_upd"):
+    for k in ("dismissed_dl", "dismissed_upd", "dismissed_self"):
         v = raw.get(k)
         if isinstance(v, str):
             out[k] = v
@@ -93,6 +94,20 @@ def forget_upd(sig: str) -> dict:
 
 def reset() -> None:
     _save(_blank())
+
+
+def forget_self(sig: str) -> dict:
+    """启动自检提示的已读记账（1.2.9）。
+
+    只有「告知类」的事（刚更新过、数据已迁移）可以被忽略；数据读不出来、
+    降级只读这类 error 一律不给忽略入口 —— 忽略之后用户就再也看不到原因了。
+    指纹只由条目本身决定，不掺时间：同一套结论忽略过就不再打扰。
+    """
+    st = load()
+    if sig and st["dismissed_self"] != sig:
+        st["dismissed_self"] = sig
+        _save(st)
+    return st
 
 
 def digest(items: list[str]) -> str:

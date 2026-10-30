@@ -159,6 +159,10 @@ window.__WAASS_PAGE__ = "%%WAASS_PAGE%%";</script>
       </div>
     </div>
 
+    <!-- 启动自检（1.2.9）：刚换过 exe、数据被迁移过、数据读不出来。
+         放在最上面 —— 「你原来的数据还在不在」比其它任何提示都优先。
+         条目文案由 app.js 按 code + 当前语言拼，切语言会跟着变。 -->
+    <div id="selfBar" class="selfbar" hidden></div>
     <div id="lockBar" class="lockbar" hidden></div>
     <div id="warnBar" class="warnbar" hidden></div>
     <!-- 启动自动同步的结果：有可更新版本时才亮，忽略过的不再出现 -->

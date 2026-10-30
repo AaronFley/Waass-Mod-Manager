@@ -2476,3 +2476,112 @@ in the English UI), `README.en.md`, `CHANGELOG.en.md` and this file's English
 counterpart. English users do not install localization packs, so "CN
 localization" is presented as a feature (translating English mods into the
 community's Chinese), not a tutorial.
+## 31. 1.2.9: data compatibility and startup self-check (2026-10-30)
+
+### Goal (the user's own acceptance criterion)
+
+> Iterating a new version must be seamless for users: replacing the main program
+> is all it should take.
+
+The test: **keep `data/`, swap only the exe, and everything is still in place when
+the program opens** — mod list, groups, Nexus IDs, install records, localization
+originals, save game backups, operation log. Nobody should have to export, import or
+move folders to upgrade, and nobody should have to guess whether their data survived.
+
+### Data version
+
+`data/meta.json`:
+
+```json
+{"schema": 3, "app": "1.2.9", "first_seen": "…", "last_seen": "…",
+ "history": [{"schema": 3, "app": "1.2.9", "at": "…"}]}
+```
+
+- `schema` is the data format version. 1 = early 1.0.x; 2 = 1.2.8 and earlier (a few
+  JSON files, no version marker); 3 = 1.2.9 onward.
+- `app` means **the version that ran last** and is owned solely by `compat.touch()`.
+  `prepare()` must never write it — writing it there makes the self-check conclude
+  "version unchanged" forever.
+- No `meta.json` but a `config.json` or any core ledger → treated as legacy (v2).
+  No data at all → fresh. Neither path may crash.
+
+### Migration
+
+- **Back up before touching anything**: the core file set is copied to
+  `data/_backup/pre-schema<old>-<timestamp>/` with a `README.txt` explaining how to
+  roll back. If the backup fails, **nothing is migrated** (better not to upgrade than
+  to edit data unprotected).
+- **Idempotent**: `_STEPS = {2: _migrate_2_to_3}`; every step must produce the same
+  result when run twice. After an interruption (power loss, kill) the next launch
+  resumes from the schema recorded in meta.
+- The 2→3 step deliberately **changes no data format at all**: it only creates the
+  common folders, quarantines unreadable files and stamps the version. Real format
+  changes belong to a future 3→4; historical steps are never edited.
+- Folders are only filled in for existing users with data; a fresh install creates no
+  empty directories (`tools/coldstart.py` verifies that a launch adds no files).
+
+### Damaged files
+
+An unparseable `xxx.json` is renamed to `xxx.json.broken-<timestamp>` and kept; the
+app carries on as if the record were missing. **Never deleted** — a missing brace from
+a hand edit must not mean data loss.
+
+### Downgrade protection
+
+When `schema > SCHEMA` (the data was written by a newer build):
+
+- `WAASS_READONLY=1` is set and `guard` refuses every write from then on;
+- **meta is not rewritten, no migration, no quarantine**;
+- a red banner explains "data is vX, this build only understands vY, switched to
+  read-only" and **offers no dismiss button**.
+
+### Startup self-check (`core/selfcheck.py`)
+
+Runs once per launch *before* the server starts (`run.py`), because "does this build
+understand the user's data" must be answered before anyone reads it. The self-check
+swallowing its own exceptions is intentional — a check that locks the user out is
+worse than no check.
+
+Checks: did the version change (`meta.app` comparison), schema compatibility, can the
+core JSON files be parsed, is the configured game folder still there, does
+`update_feed` look like a URL, is the data folder writable (a real temp file is written
+and removed).
+
+The result goes to `data/selfcheck.json` with the last 10 launches kept (so you can see
+when the version changed). **In read-only mode the result is still kept in memory** even
+though it can't be written to disk — otherwise the user would be told "your data comes
+from a newer version" by means of exactly zero words.
+
+### Top banner (iteration requirement 3: updates or self-check problems must surface at the top)
+
+- Position: top of the content area (`#selfBar`), ahead of the "needs attention" and
+  "N updates available" banners. It goes first because it answers "is my data still
+  there".
+- Three levels: green (just updated and data verified / data migrated), amber (a file
+  was quarantined, game folder gone, update source misconfigured), red (data
+  unreadable, read-only downgrade).
+- Green and amber can be dismissed (`dismissed_self` in `ui.json`, fingerprint built
+  from the items only, never from time); **red has no × button** — dismissing it would
+  hide the only explanation the user gets.
+- **Messages carry `code + params` only**; the frontend assembles the sentence in the
+  current language. This extends §30 discipline 5: the backend no longer emits
+  pre-translated sentences, so even an already visible banner follows a language switch.
+- "Just updated" must answer "is my old data fine": `updated_data_ok` with
+  `{from,to,n}` (n = files parsed successfully), or `updated_data_issue` with the number
+  of failures. A welcome message alone says nothing.
+
+### Settings page
+
+The About section now shows "Data format: vX (program supports vY)" and a "Run check"
+button (`POST /api/selfcheck`). When something is wrong, those two numbers are the only
+facts a user can report precisely.
+
+### Policy (in force from 1.2.9 onward)
+
+> **Any feature addition, removal or behaviour change must update both the Chinese
+> and the English documentation.**
+
+Scope: `web/static/guide.html` + `guide.en.html`, `README.md` + `README.en.md`,
+`CHANGELOG.md` + `CHANGELOG.en.md`, `docs/SPEC.md` + `docs/SPEC.en.md`.
+Updating only one side leaves half the users with a wrong description — worse than
+no description at all.

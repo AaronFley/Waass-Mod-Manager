@@ -20,10 +20,11 @@ from pathlib import Path
 from core.paths import (DATA_DIR, RES_DIR, detect_game_root, forget_detected,
                         game_layout, load_config, save_config)
 from core.scanner import scan
-from core import (actions, appinfo, conflicts, downloads, gamever, guard, i18n, identify,
-                  library, localize, localize_backup, localize_job, merger,
-                  nexus_meta, picker, registry, safety,
-                  saves, storage, track, translate, ui as ui_store, winwatch)
+from core import (actions, appinfo, compat, conflicts, downloads, gamever,
+                  guard, i18n, identify, library, localize, localize_backup,
+                  localize_job, merger, nexus_meta, picker, registry, safety,
+                  saves, selfcheck, storage, track, translate, ui as ui_store,
+                  winwatch)
 from core import install as installer
 
 APP_DIR = Path(__file__).resolve().parent
@@ -329,6 +330,36 @@ def _banner_state() -> dict:
         # （没有任何 ID）看到的是「同步一片安静」，以为功能没实现。
         # 合订本本来就不在 Nexus 上，不算在这里。
         "ids": _id_state(res),
+        # 启动自检（1.2.9）：刚被更新过 / 数据迁移过 / 数据读不出来。
+        # 条目只有 code + params，句子由前端按当前语言拼 —— 切语言后
+        # 连已经显示的提醒都跟着变。
+        "selfcheck": _self_state(st),
+    }
+
+
+def _self_state(st: dict | None = None) -> dict:
+    """自检提示的「该不该出现」。error 级不可忽略，见 core/ui.forget_self。"""
+    sc = selfcheck.summary()
+    items = sc.get("items") or []
+    infos = [i for i in items if i.get("level") != "error"]
+    sig = ""
+    if infos:
+        sig = ui_store.digest([
+            f"{i.get('code')}|{json.dumps(i.get('params') or {}, sort_keys=True)}"
+            for i in infos])
+    st = st if st is not None else ui_store.load()
+    return {
+        "level": sc.get("level") or "ok",
+        "items": items,
+        "updated": bool(sc.get("updated")),
+        "prev_app": sc.get("prev_app") or "",
+        "app": sc.get("app") or appinfo.APP_VERSION,
+        "kind": sc.get("kind") or "ok",
+        "readonly": bool(sc.get("readonly")),
+        "app_schema": sc.get("app_schema") or compat.SCHEMA,
+        "data_schema": sc.get("data_schema") or compat.SCHEMA,
+        "sig": sig,
+        "dismissed": bool(sig) and st.get("dismissed_self") == sig,
     }
 
 
@@ -547,7 +578,12 @@ class Handler(BaseHTTPRequestHandler):
                 "packages": len(installer.list_packages().get("active", [])),
                 "backups": len(saves.list_backups()),
             }
-            return self._send(*_json(appinfo.info(root, DATA_DIR, counts)))
+            info = appinfo.info(root, DATA_DIR, counts)
+            # 关于页顺带回答两个用户最容易问的问题：「我的数据是哪一版格式的」
+            # 「上次启动自检查出了什么」。答不上来时至少能报清楚。
+            info["compat"] = compat.dump()
+            info["selfcheck"] = selfcheck.summary()
+            return self._send(*_json(info))
 
         if path == "/api/storage":
             if not self._api_guard():
@@ -666,6 +702,16 @@ class Handler(BaseHTTPRequestHandler):
             t0 = time.time()
             STATE.refresh()
             return self._send(*_json({"ok": True, "ms": int((time.time() - t0) * 1000)}))
+
+        if path == "/api/selfcheck":
+            # 设置页的「重新自检」。只重跑本地的数据体检，不碰迁移
+            # （迁移在启动时做，运行中重跑没有意义也没有好处）。
+            st = compat.state()
+            rep = selfcheck.run(appinfo.APP_VERSION,
+                                {"kind": st["kind"], "from": st["from"],
+                                 "to": compat.SCHEMA, "notes": []})
+            return self._send(*_json({"ok": True, "selfcheck": rep,
+                                      "ui": _banner_state()}))
 
         if path == "/api/config":
             if "lang" in body:
@@ -990,7 +1036,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/open-url":
             url = str(body.get("url") or "")
-            if not re.match(r"^https://(www\.)?nexusmods\.com/", url):
+            # 只放行两个官方渠道：Nexus（模组页）和 GitHub（程序自己的发布页，
+            # 1.2.9 起「发现新版本」要能把人送过去）。其它一律拒绝 ——
+            # 这个接口最后会落到 os.startfile，不能变成一个任意打开器。
+            if not re.match(r"^https://(www\.)?(nexusmods\.com|github\.com)/", url):
                 return self._send(*_json({"error": i18n.t("srv.only_nexus_links")}, 400))
             os.startfile(url)                        # noqa: S606 已限定域名
             return self._send(*_json({"ok": True}))
@@ -1298,6 +1347,9 @@ class Handler(BaseHTTPRequestHandler):
                                        or STATE.downloads_summary().get("new_sig") or ""))
             elif kind == "upd":
                 ui_store.forget_upd(str(body.get("sig") or ""))
+            elif kind == "self":
+                # 启动自检的告知类提示。error 级前端不给 ×，走不到这里。
+                ui_store.forget_self(str(body.get("sig") or ""))
             else:
                 return self._send(*_json({"error": i18n.t("srv.unknown_dismiss_kind")}, 400))
             return self._send(*_json({"ok": True, "ui": _banner_state()}))
@@ -1397,6 +1449,8 @@ class Handler(BaseHTTPRequestHandler):
             "ui": _banner_state(),
             "conflicts": STATE.conflicts_report(),
             "library": library.index(),
+            # 数据格式版本（设置页「关于」里给一行，出问题时让用户能报得清楚）
+            "compat": compat.dump(),
             "writable": [str(p) for p in guard.allowed_roots()],
             "layout": ({k: str(v) for k, v in game_layout(root).items()} if root else None),
         }

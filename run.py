@@ -180,6 +180,17 @@ def main() -> int:
         alert(i18n.t("run.already_running"), icon=0x30)
         return 1
 
+    # 启动自检（1.2.9）：在起服务之前做，因为要回答的问题是「用户原来那份
+    # data/ 这一版的程序还认不认」。认不出来就得先迁移，迁移要在别人读之前做完。
+    #
+    # 整个自检不许把程序挡死：它自己出问题就跳过，界面照常起来 ——
+    # 一个自检把用户挡在门外，比不检查糟糕得多。
+    try:
+        from core import appinfo, selfcheck
+        selfcheck.run(appinfo.APP_VERSION)
+    except Exception:                                   # noqa: BLE001
+        pass
+
     try:
         httpd, port = start_background(args.port, watch_close=not args.serve_only)
     except OSError as exc:

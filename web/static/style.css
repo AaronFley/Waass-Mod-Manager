@@ -459,6 +459,31 @@ svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width:
 .seg button.is-on { background: var(--accent-soft); color: var(--accent-ink); }
 .seg button + button { border-left: 1px solid var(--border); }
 
+/* 启动自检条（1.2.9）。比警告条更靠上，因为它回答的是「我原来的数据还在不在」。
+   三级：
+     info  —— 刚换过 exe、数据已迁移（绿：一切正常）
+     warn  —— 有文件被隔离、配的游戏目录不在了（黄）
+     error —— 数据读不出来、数据来自更新版本的程序（红，且不给「忽略」） */
+.selfbar {
+  margin: 0 18px 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-size: 11.5px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  border: 1px solid transparent;
+}
+.selfbar[data-level="warn"] { background: var(--warn-soft); color: var(--warn); }
+.selfbar[data-level="error"] { background: var(--danger-soft); color: var(--danger); }
+.selfbar .self-line { min-width: 0; }
+.selfbar .self-line.is-new { color: var(--accent-ink); }
+.selfbar .link-btn {
+  color: inherit; text-decoration: underline; white-space: nowrap; flex-shrink: 0;
+  background: none; border: 0; cursor: pointer; font-size: inherit; padding: 0;
+}
+.selfbar .bar-x { margin-left: auto; }
+
 .warnbar {
   margin: 0 18px 12px;
   padding: 8px 12px;
@@ -1830,6 +1855,7 @@ svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width:
   margin-top: 9px; font-size: 11.5px; color: var(--text-2); line-height: 1.7;
 }
 .about-note.is-new { color: var(--accent-ink); font-weight: 500; }
+.about-note.is-warn { color: var(--warn); font-weight: 500; }
 .about-note a { color: var(--accent); text-decoration: none; }
 .about-note a:hover { text-decoration: underline; }
 .set-fixed {

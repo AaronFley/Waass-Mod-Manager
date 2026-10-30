@@ -21,6 +21,8 @@ const S = {
   // 但退出批量模式一定要清，否则下次进来会看到一堆莫名其妙的勾。
   picking: false,
   picked: new Set(),
+  // 程序自己的新版本（/api/app/check 的结果）。1.2.9 起接进顶部自检条。
+  appUpd: null,
 };
 
 /* ---------- 主题：auto / light / dark ---------- */
@@ -213,6 +215,7 @@ function renderAll() {
   renderStatus();
   renderWarn();
   renderSyncBar();
+  renderSelfBar();
   if (S.selected) {
     const m = findMod(S.selected);
     m ? renderDetails(m) : showDetailsEmpty();
@@ -640,6 +643,88 @@ function renderSyncBar() {
     if (showUpd) { ignoreUpdates(); return; }
     renderSyncBar();
   };
+}
+
+/* 启动自检（1.2.9）。
+   三类事分开放：
+     · error —— 数据读不出来 / 数据来自更新版本的程序（只读）。永远显示，
+               **不给「忽略」**：忽略了用户就再也看不到原因，只会觉得程序坏了。
+     · info  —— 刚换过 exe（附「旧数据已核对 N 项正常」）、数据被迁移过。
+               给「知道了」，同一套结论不再打扰（服务端 ui.json 记指纹）。
+     · 有新版本 —— 异步问一次，问到了才出来。
+   句子全部按 code 现拼，所以切语言时这条也会跟着变，不会残留上一次的语言。 */
+function selfItemText(it) {
+  const params = {};
+  for (const k in (it.params || {})) params[k] = esc(String(it.params[k]));
+  return T('self.' + it.code, params);
+}
+
+function renderSelfBar() {
+  const bar = $('#selfBar');
+  if (!bar) return;
+  const sc = S.data?.ui?.selfcheck || {};
+  const all = (sc.items || []).filter(Boolean);
+  const errors = all.filter(i => i.level === 'error');
+  const infos = all.filter(i => i.level !== 'error');
+  // 告知类被「知道了」就不出来；换新版本、换数据状态下指纹会变，自动回来
+  const showInfos = infos.length && !sc.dismissed;
+  const newer = (S.appUpd && S.appUpd.newer) ? S.appUpd : null;
+
+  const lines = errors.concat(showInfos ? infos : []);
+  if (!lines.length && !newer) { bar.hidden = true; bar.innerHTML = ''; return; }
+
+  bar.hidden = false;
+  bar.dataset.level = errors.length ? 'error'
+    : (lines.some(l => l.level === 'warn') ? 'warn' : 'info');
+
+  // 最多摆两条：真同时有三四件事时，把话说长反而没人看。
+  const MAX = 2;
+  const shown = lines.slice(0, MAX);
+  let html = shown.map(i =>
+    `<span class="self-line">${selfItemText(i)}</span>`).join('');
+  if (lines.length > MAX) {
+    html += `<button class="link-btn" id="selfMore">${T('self.more', { n: lines.length - MAX })}</button>`;
+  }
+
+  if (newer) {
+    html += `<span class="self-line is-new">${T('self.new_version', { ver: esc(newer.latest || '') })}</span>`
+      + `<button class="link-btn" id="selfGoUpd">${T('self.new_version_go')}</button>`;
+  }
+
+  if (!errors.length) {
+    html += `<button class="bar-x" id="selfX" title="${T('self.ignore_title')}">${T('self.ignore')}</button>`;
+  }
+  bar.innerHTML = html;
+
+  const more = $('#selfMore');
+  if (more) more.onclick = () => toast(lines.map(i => '· ' + selfItemText(i)).join('\n'), 8000);
+  const go = $('#selfGoUpd');
+  if (go) go.onclick = () => {
+    // 走服务端 os.startfile：页面里 window.open 会被 --app 窗口接住，开成没地址栏的怪窗口
+    api('/api/open-url', { url: newer.url || '' })
+      .catch(e => toast(e.message, 3500));
+  };
+  const x = $('#selfX');
+  if (x) x.onclick = async () => {
+    try {
+      const r = await api('/api/ui/dismiss', { kind: 'self', sig: sc.sig || '' });
+      if (r.ui && S.data) S.data.ui = r.ui;
+      renderSelfBar();
+    } catch (e) { toast(e.message, 3500); }
+  };
+}
+
+/* 问一次「程序自己有没有新版本」。刻意不 await：
+   启动时先把界面给出来，网络的事过后补。没配更新源就什么都不显示。 */
+async function checkAppUpdate() {
+  if (_qs.get('nosync') === '1') return;
+  try {
+    const r = await api('/api/app/check', {});
+    if (r && r.newer) {
+      S.appUpd = r;
+      renderSelfBar();
+    }
+  } catch (e) { /* 离线 / 更新源挂了：不打扰，下次启动再问 */ }
 }
 
 function renderWarn() {
@@ -1756,6 +1841,7 @@ load().then(() => {
     renderPickBar();
   }
   autoSync();
+  checkAppUpdate();
 });
 
 /* 启动后悄悄同步一次 Nexus：补封面、查有没有新版本。

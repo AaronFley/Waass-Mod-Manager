@@ -168,11 +168,17 @@ async function openSettingsDialog() {
             <div><span>${T('set.mods_enabled')}</span><b>${ABOUT?.counts?.mods ?? S.mods.length} / ${ABOUT?.counts?.enabled ?? '—'}</b></div>
             <div><span>${T('set.install_records')}</span><b>${TN('set.archives_one', 'set.archives_many', ABOUT?.counts?.packages ?? 0)}</b></div>
             <div><span>${T('set.runtime')}</span><b>Python ${esc(ABOUT?.python || '')} · ${esc(ABOUT?.os || '')}</b></div>
+            <!-- 数据格式版本（1.2.9）。出问题时这两个数字是唯一能问清楚的线索：
+                 「你的数据是第几版、程序认到第几版」。 -->
+            <div><span>${T('set.data_schema')}</span><b>${T('set.data_schema_val', {
+              data: esc(String(ABOUT?.compat?.data_schema ?? '—')),
+              app: esc(String(ABOUT?.compat?.app_schema ?? '—')) })}</b></div>
           </div>
           <div class="about-path" title="${esc(ABOUT?.data_dir || '')}">${T('set.data_dir', { path: esc(ABOUT?.data_dir || '') })}</div>
           <div class="set-actions" style="margin-top:9px">
             <button class="btn btn-sm" id="setOpenData">${T('set.open_data_dir')}</button>
             <button class="btn btn-sm" id="setCheckUpd">${T('set.check_update')}</button>
+            <button class="btn btn-sm" id="setSelfCheck">${T('set.selfcheck_btn')}</button>
           </div>
           <div class="about-note" id="aboutUpd">
             ${T('set.about_note')}
@@ -293,10 +299,40 @@ async function openSettingsDialog() {
     try {
       const r = await api('/api/app/check', {});
       box.className = 'about-note' + (r.newer ? ' is-new' : '');
-      box.innerHTML = esc(r.message || '') +
-        (r.url && r.newer ? ` · <a href="#" id="aboutGo">${T('set.update_link')}</a>` : '');
+      // 句子自己用当前语言拼，不用后端那句 message —— 切语言后这里也要跟着变。
+      // 结果只有三种：有新版 / 已是最新 / 没配更新源。
+      box.innerHTML = (r.newer
+        ? T('self.new_version', { ver: esc(r.latest || '') })
+        : (r.ok ? T('set.up_to_date') : T('set.no_feed')))
+        + (r.url && r.newer ? ` · <a href="#" id="aboutGo">${T('set.update_link')}</a>` : '');
       const go = $('#aboutGo');
-      if (go) go.onclick = (e) => { e.preventDefault(); window.open(r.url, '_blank', 'noopener'); };
+      if (go) go.onclick = (e) => {
+        e.preventDefault();
+        // 走服务端：--app 窗口会把 window.open 接住，开成一个没有地址栏的怪窗口
+        api('/api/open-url', { url: r.url }).catch(err => toast(err.message, 3500));
+      };
+    } catch (e) {
+      box.textContent = T('set.check_failed', { msg: e.message });
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  /* 重新跑一次启动自检（1.2.9）。只查本地数据，不联网、不迁移。 */
+  $('#setSelfCheck').onclick = async () => {
+    const box = $('#aboutUpd');
+    const btn = $('#setSelfCheck');
+    btn.disabled = true;
+    box.textContent = T('set.selfchecking');
+    try {
+      const r = await api('/api/selfcheck', {});
+      const items = (r.selfcheck && r.selfcheck.items) || [];
+      const bad = items.filter(i => i.level === 'error' || i.level === 'warn');
+      box.className = 'about-note' + (bad.length ? ' is-warn' : '');
+      box.innerHTML = bad.length
+        ? bad.map(i => '· ' + T('self.' + i.code, i.params || {})).join('<br>')
+        : T('set.selfcheck_ok');
+      if (r.ui && S.data) { S.data.ui = r.ui; renderSelfBar(); }
     } catch (e) {
       box.textContent = T('set.check_failed', { msg: e.message });
     } finally {

@@ -2,6 +2,51 @@
 
 The version number is maintained in a single place, `core/appinfo.py`, and is written into the exe's file properties at build time.
 
+## 1.2.9 — 2026-10-30
+
+**Upgrading is now just "swap the exe".** This release turns "will my data survive
+the next version" into an actual mechanism instead of a matter of luck — and every
+launch checks itself, speaking up in the top banner when something needs saying.
+
+- **Data compatibility module** (`core/compat.py`): `data/meta.json` records which
+  build wrote this data (a data format version; currently v3). An existing user
+  opening 1.2.9 for the first time is recognised as "has data, no version marker"
+  (v2) — the whole data set is **copied to `data/_backup/pre-schema2-<timestamp>/`
+  before anything is touched**, then migrated and stamped. Migration is idempotent:
+  running it twice gives the same result, and an interrupted run resumes next launch.
+- **A broken data file never disappears**: an unparseable `xxx.json` is renamed to
+  `xxx.json.broken-<timestamp>` and kept. The app carries on as if that record were
+  missing — **nothing is ever deleted**.
+- **Downgrade protection**: if `data/` was written by a newer build, 1.2.9 switches
+  to **read-only** (`WAASS_READONLY`). Everything stays browsable and searchable, but
+  not a single byte is written, so an older build can't damage fields it doesn't
+  understand. A red banner explains why, and it deliberately has no "dismiss" button.
+- **Startup self-check** (`core/selfcheck.py`): every launch verifies whether the
+  version just changed, whether this build understands the data format, whether the
+  bookkeeping files parse, whether the data folder is writable, and whether the update
+  source looks like a real URL. The result is written to `data/selfcheck.json` (last
+  10 launches kept, so you can see when the version changed).
+- **Top self-check banner**: green (just updated / data migrated), amber (a file was
+  quarantined, the configured game folder is gone), red (data unreadable, read-only
+  downgrade). Green and amber can be dismissed with "Got it"; **red never can** —
+  dismissing it would hide the only explanation the user would ever get. Text is
+  assembled from `code + params`, so it follows a language switch immediately.
+- **After a version change it answers the question that matters**: "existing data
+  checked out (N files read fine)" or "{n} data items could not be read" — not just
+  a friendly welcome to the new version.
+- Settings → About now shows "Data format: vX (program supports vY)" and a
+  "Run check" button. The update-check text is assembled from `code` too, and its
+  `window.open` (which produced an address-bar-less window inside `--app`) now goes
+  through the server.
+- The allow-list for opening links grew to include `github.com` (previously
+  nexusmods only); every other domain is still refused.
+- New `tests/test_compat.py` (31 checks: fresh install / legacy migration / broken
+  file quarantine / idempotency / read-only downgrade / just-updated / post-update
+  data problems / unwritable data folder).
+- **Policy**: from this release on, any feature addition, removal or behaviour change
+  **must update both the Chinese and the English documentation** (built-in guide,
+  README, CHANGELOG, SPEC). Recorded in `docs/SPEC.md` §31.
+
 ## 1.2.8 — 2026-10-30
 
 **The interface now speaks English.** A new button in the top bar ("EN" while in

@@ -25,7 +25,9 @@
         a time, separated by a divider: "N mods not matched to Nexus" and "N mods have
         updates". Both come with a button that takes you where you deal with them.
         A separate orange banner counts "N things need attention" — <i>that</i> one is
-        the banner for real problems.</li>
+        the banner for real problems. The very top one (green / amber / red) is the
+        <b>startup self-check</b>: it speaks up when you just switched versions, when
+        your data was migrated, or when a data file can't be read.</li>
     </ol>
   </section>
 
@@ -135,6 +137,35 @@
   </section>
 
   <section class="gd-sec">
+    <h4>Upgrading and your data</h4>
+    <p>Upgrading takes exactly one step: <b>overwrite the old <code>Waass.exe</code> with the
+      new one and double-click it</b>. Your mod list, groups, Nexus IDs, install records,
+      localization originals and save game backups all live in the <code>data</code> folder
+      next to the app — the new build picks them up as they are.
+      <b>No export, no import, no manual file shuffling.</b></p>
+    <p>Every launch starts with a quick self-check: is this the first run or a version you
+      just switched to, does this build understand the data format, can the bookkeeping
+      files be read, can anything be written into the data folder. Anything worth knowing
+      is said in the top banner — you never have to wonder whether your data survived.</p>
+    <ul>
+      <li><b>You just switched builds</b>: it says either "existing data checked out
+        (N files read fine)" or exactly which items are broken and what they're called.</li>
+      <li><b>The data format needs upgrading</b>: the whole set is copied to
+        <code>data/_backup/pre-schema…</code> <i>before</i> anything is touched. To roll
+        back, copy those files into <code>data</code> again.</li>
+      <li><b>A data file is damaged</b> (power loss, hand-edited JSON): it's renamed to
+        <code>xxx.json.broken-&lt;timestamp&gt;</code> and <b>kept, never deleted</b>. The
+        app carries on as if that record were missing and rebuilds it.</li>
+      <li><b>You went back to an older build</b>: if <code>data</code> was written by a
+        newer version, the app switches to <b>read-only</b> — everything stays browsable,
+        but not a single byte is written, so the newer data can't be damaged by an older
+        build that doesn't understand it. Switch back to the newer build to keep editing.</li>
+      <li>Settings → About shows "Data format: v…" and a "Run check" button; those two are
+        the most useful facts when reporting a problem.</li>
+    </ul>
+  </section>
+
+  <section class="gd-sec">
     <h4>When something goes wrong</h4>
     <ul>
       <li><b>Just made a mistake</b>: there's an "Undo" button right on the banner.
@@ -150,7 +181,7 @@
   </section>
 
   <div class="gd-foot">
-    This guide covers 1.2.8. If the app ever disagrees with this page, trust the app —
+    This guide covers 1.2.9. If the app ever disagrees with this page, trust the app —
     that's our bug, and issue reports are welcome.
   </div>
 </div>

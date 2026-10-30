@@ -41,7 +41,7 @@ def check(name: str, cond: bool, extra: str = "") -> None:
 def main() -> int:
     print("界面提示账本")
 
-    check("账本初始为空", ui.load() == {"dismissed_warns": [], "dismissed_dl": "", "dismissed_upd": ""},
+    check("账本初始为空", ui.load() == {"dismissed_warns": [], "dismissed_dl": "", "dismissed_upd": "", "dismissed_self": ""},
           str(ui.load()))
 
     ui.forget_warns(["tilde_prefix|modA", "dup_priority|"])
@@ -59,7 +59,7 @@ def main() -> int:
     check("指纹变了就覆盖", ui.load()["dismissed_dl"] == "def456")
 
     ui.reset()
-    check("reset 清空账本", ui.load() == {"dismissed_warns": [], "dismissed_dl": "", "dismissed_upd": ""})
+    check("reset 清空账本", ui.load() == {"dismissed_warns": [], "dismissed_dl": "", "dismissed_upd": "", "dismissed_self": ""})
 
     print("指纹")
     a = ui.digest(["x|1", "y|2"])
@@ -96,7 +96,7 @@ def main() -> int:
 
     print("损坏的账本")
     (Path(os.environ["WAASS_DATA_DIR"]) / "ui.json").write_text("{ 这不是 json", encoding="utf-8")
-    check("坏文件按空账本处理", ui.load() == {"dismissed_warns": [], "dismissed_dl": "", "dismissed_upd": ""})
+    check("坏文件按空账本处理", ui.load() == {"dismissed_warns": [], "dismissed_dl": "", "dismissed_upd": "", "dismissed_self": ""})
 
     print("选择框模块")
     from core import picker

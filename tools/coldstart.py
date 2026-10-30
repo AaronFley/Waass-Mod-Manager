@@ -76,6 +76,15 @@ def main() -> int:
         print(f"游戏目录: {game or '（故意不给）'}")
         print(f"配置目录: {base / 'cfg'}\n")
 
+        # 1.2.9：真实启动的第一步就是自检（run.py 在起服务之前跑）。这里照做 ——
+        # 否则冷启动验的是「没有自检的那个程序」，和发出去的 exe 不是一回事。
+        from core import appinfo, selfcheck
+        sc = selfcheck.run(appinfo.APP_VERSION)
+        print(f"[自检] kind={sc['kind']} level={sc['level']} "
+              f"items={[i['code'] for i in sc['items']]}")
+        if sc["level"] == "error":
+            fails.append(f"自检报错：{sc['items']}")
+
         import server
         from core.paths import detect_game_root
 
@@ -123,11 +132,18 @@ def main() -> int:
         print("\n[落地文件] 程序在 data/ 里自己建了什么：")
         # 只读访问不该写任何东西 —— 这既是「别人拿到是干净的」，
         # 也是我们自己的规矩：没点过写操作，就别在硬盘上留痕。
+        #
+        # 唯一的例外是 1.2.9 起的两份「程序自己的账」：meta.json 记数据格式版本、
+        # selfcheck.json 记这次启动的自检结论。它们不是用户数据，每次启动都要写。
+        ALLOWED = {"meta.json", "selfcheck.json"}
         if data.is_dir():
             landed = sorted(e.name for e in data.iterdir())
             print("  " + ("、".join(landed) if landed else "（空目录）"))
-            if landed:
-                fails.append(f"只读访问却写了文件：{landed}")
+            extra = [n for n in landed if n not in ALLOWED]
+            if extra:
+                fails.append(f"只读访问却写了文件：{extra}")
+            else:
+                print("  只有版本记录与自检记录（允许）")
         else:
             print("  没有创建 data/（正确：什么都没点，就不该落盘）")
 
