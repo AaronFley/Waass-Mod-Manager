@@ -1,8 +1,10 @@
 <!DOCTYPE html>
-<html lang="%%WAASS_HTML_LANG%%" data-theme="dark">
+<html lang="%%WAASS_HTML_LANG%%" translate="no" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 页面自带双语，别让浏览器的翻译功能跳出来多嘴。 -->
+<meta name="google" content="notranslate">
 <title>Waass Mod Manager</title>
 <!-- 图标只给一个 .ico：它内部有 16~256 十档真图，外壳能按需要精确挑。
      不额外挂单尺寸 PNG —— 一旦页面上有 sizes="16x16" 的条目，
@@ -30,7 +32,8 @@
 })();
 </script>
 <link rel="stylesheet" href="/static/style.css">
-<script>window.__WAASS_TOKEN__ = "%%WAASS_TOKEN%%";</script>
+<script>window.__WAASS_TOKEN__ = "%%WAASS_TOKEN%%";
+window.__WAASS_PAGE__ = "%%WAASS_PAGE%%";</script>
 <!-- 当前语言的完整键表。内联而不是再发一个请求：首屏渲染时 T() 必须已经能用，
      否则静态文案会先闪一遍中文再变英文。表来自 web/i18n/<lang>.json。 -->
 <script>window.__WAASS_I18N__ = %%WAASS_I18N%%;</script>

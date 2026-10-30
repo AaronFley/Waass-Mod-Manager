@@ -25,6 +25,15 @@ catalog (`web/i18n/`), so the UI, dialogs and toasts never mix the two.
   detection, the is-live highlight in update tracking). Under the English UI
   they would silently stop working — the backend now sends a stable `code`
   field and the frontend matches on that.
+- Fixed a fatal race reproduced during testing: the full page reload triggered by
+  switching languages lets the old page's "goodbye" beacon arrive **after** the new
+  page's requests, so the server believed everyone had left and killed itself 6
+  seconds later. The Edge window is a separate process and stayed open — the UI
+  looked frozen (panels would not open, language switching did nothing). Every
+  page now carries an identity token: late beacons from old pages are discarded,
+  and the heartbeat reports the same token as a second line of defense.
+- Also suppressed Edge's "translate this page?" prompt in the English UI (a
+  `notranslate` declaration — the app is bilingual on purpose).
 - New `tools/i18n_merge.py` (fragment merge + placeholder checks) and
   `tests/test_i18n.py` (key parity, no empty values, no CJK leftovers, plural
   pairs).

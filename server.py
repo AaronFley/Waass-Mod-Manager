@@ -50,6 +50,7 @@ LIFECYCLE = {
     "last_seen": 0.0,     # 最后一次收到任何请求的时间
     "app_window": False,  # 是不是我们自己的 --app 窗口（浏览器标签页模式不看窗口）
     "started_at": 0.0,    # 窗口是什么时候叫起来的
+    "page_id": "",        # 当前页面的身份证（每次页面加载都换新的）
     "reason": "",         # 退出原因，写进 data/lifecycle.log 方便事后查
 }
 CLOSE_GRACE = 6.0        # 说了再见之后等几秒，留给刷新
@@ -412,10 +413,13 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.unquote(u.path)
 
         if path in ("/", "/index.html"):
-            # 有页面在加载 = 不是真的要走（比如按了刷新），取消退出倒计时
+            # 有页面在加载 = 不是真的要走（比如按了刷新），取消退出倒计时，
+            # 并给新页面发一张「身份证」—— 旧页面的迟到 bye 靠它来识别作废。
             LIFECYCLE["bye_at"] = 0.0
+            LIFECYCLE["page_id"] = secrets.token_hex(4)
             html = (WEB / "templates" / "index.html").read_text(encoding="utf-8")
             html = html.replace("%%WAASS_TOKEN%%", TOKEN)
+            html = html.replace("%%WAASS_PAGE%%", LIFECYCLE["page_id"])
             # 语言和整份键表在这里落地。键表内联而不是让前端再发一个请求：
             # 静态文案的填充在脚本一加载就跑，晚一步就会先闪一遍中文。
             lang = i18n.current()
@@ -433,6 +437,12 @@ class Handler(BaseHTTPRequestHandler):
                 return
             return self._api_state()
         if path == "/api/health":
+            # 心跳报身份证：当前页还活着，之前那声再见就作废（双保险，
+            # 防 beacon 恰好卡在「认了身份证」和「新页面加载完」之间落地的缝隙）。
+            qs = urllib.parse.parse_qs(u.query)
+            page = (qs.get("page") or [""])[0]
+            if page and page == (LIFECYCLE.get("page_id") or ""):
+                LIFECYCLE["bye_at"] = 0.0
             return self._send(*_json({"ok": True}))
 
         if path == "/api/journal":
@@ -634,10 +644,17 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(*_json({"error": "bad json"}, 400))
 
         if path == "/api/bye":
-            # pagehide 时用 sendBeacon 打的招呼：带不了自定义头，所以用 query 校验
+            # pagehide 时用 sendBeacon 打的招呼：带不了自定义头，所以用 query 校验。
+            # page= 是页面身份证：刷新时旧页面的 beacon 可能比新页面的 GET / 还晚到，
+            # 不认身份证就会把好好活着的页面当成「已经走了」，6 秒后把服务端杀了
+            # （窗口是独立进程不会跟着关，用户看到的就是整个界面假死 —— 1.2.8 实测）。
             qs = urllib.parse.parse_qs(u.query)
             if (qs.get("t") or [""])[0] != TOKEN:
                 return self._send(*_json({"error": "unauthorized"}, 401))
+            page = (qs.get("page") or [""])[0]
+            cur = LIFECYCLE.get("page_id") or ""
+            if page and cur and page != cur:
+                return self._send(204, "text/plain", b"")   # 旧页面的迟到枪，作废
             if LIFECYCLE["watch"]:
                 LIFECYCLE["bye_at"] = time.time()
             return self._send(204, "text/plain", b"")

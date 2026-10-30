@@ -82,6 +82,8 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)
         os.environ["WAASS_DATA_DIR"] = str(base / "appdata")
+        from core import i18n
+        i18n.set_lang("zh")   # 断言的是中文文案，别跟着真实 config.json 的 lang 走
 
         # ---------- 1. 没装 Script Merger ----------
         print("[1] 没有 Merger 目录时行为不变")

@@ -34,6 +34,8 @@ def make_zip(path: Path, files: dict[str, bytes | str]) -> Path:
 
 
 def main() -> int:
+    from core import i18n
+    i18n.set_lang("zh")   # 断言的是中文文案，别跟着真实 config.json 的 lang 走
     base = Path(tempfile.mkdtemp(prefix="waass_zip_"))
     print("解压工具:", tools_report())
 

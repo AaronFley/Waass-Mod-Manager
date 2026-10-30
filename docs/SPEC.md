@@ -1972,6 +1972,18 @@ pagehide → sendBeacon('/api/bye?t=<TOKEN>') → 服务端 bye_at=now → 6 秒
 - `WAASS_KEEP=1` 关掉整套自动退出（跑接口、盯窗口时用）。
 - 退出原因追加到 `data/lifecycle.log`（保留最近 8KB），事后不用猜是哪条触发的。
 
+### 1.2.8 补充：bye 的迟到枪（同日实测）
+
+切语言 = `location.reload()` → `pagehide` 打 bye beacon。beacon 是异步火忘的，
+**可能比新页面的 `GET /` 晚到**：GET / 清零在前，beacon 落地在后，`bye_at`
+从此没人清 → 6 秒后 `os._exit`。窗口是独立进程不跟着关，用户面对一个所有
+fetch 都失败的「假死」界面 —— 面板打不开、切语言无效。
+
+修法：页面身份证。`GET /` 生成 `page_id` 注入页面；bye beacon 带上它；
+对不上当前 `page_id` 的 beacon 直接作废。心跳 `/api/health?page=` 同报身份证，
+当前页活着就清 `bye_at`（防 beacon 恰好卡在两件事之间落地的缝隙）。
+HTTP 层验证六种时序全过；真机连切两次语言 + 跨宽限期开面板，服务端存活。
+
 ### 判据做成纯函数
 
 `server.exit_reason(now, life, win_count, ...)` 不碰时间、不查窗口，参数全进，

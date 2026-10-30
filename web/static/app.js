@@ -1717,10 +1717,14 @@ showDetailsEmpty();
 
 /* 关窗时说一声，后台进程好在几秒后自己退出。
    用 sendBeacon：它在页面已经开始销毁时也能发出去，普通的 fetch 会被掐断。
-   刷新也会触发这里，但新页面会立刻请求页面本身，把倒计时取消掉。 */
+   刷新也会触发这里 —— 所以往里塞了本页的身份证（PAGE_ID）：刷新时旧页面的
+   beacon 有机会比新页面的请求还晚到，服务端认出是旧页面的枪就作废，不然会把
+   活着的服务端杀掉，窗口就成了没有后台的空壳（1.2.8 实测：切语言后整个界面假死）。
+   新页面加载后每 15 秒报一次同一个身份证，双保险。 */
+const PAGE_ID = window.__WAASS_PAGE__ || '';
 window.addEventListener('pagehide', () => {
   try {
-    navigator.sendBeacon(`/api/bye?t=${encodeURIComponent(TOKEN)}`, '');
+    navigator.sendBeacon(`/api/bye?t=${encodeURIComponent(TOKEN)}&page=${encodeURIComponent(PAGE_ID)}`, '');
   } catch { /* 老浏览器就算了，进程会留着，下次启动会提示已在运行 */ }
 });
 
@@ -1729,7 +1733,7 @@ window.addEventListener('pagehide', () => {
    那一枪不够可靠：关窗瞬间这一枪有机会发不出去，进程就留在后台了（1.2.6 实测
    关窗后活了四十多分钟）。这里只请求 /api/health，很小。 */
 setInterval(() => {
-  fetch('/api/health', { cache: 'no-store' }).catch(() => {});
+  fetch(`/api/health?page=${encodeURIComponent(PAGE_ID)}`, { cache: 'no-store' }).catch(() => {});
 }, 15000);
 
 load().then(() => {
