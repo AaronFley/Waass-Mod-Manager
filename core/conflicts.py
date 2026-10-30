@@ -84,7 +84,10 @@ def _w3strings_paths(mod_dir: Path) -> list[str]:
 
 def analyze(root: Path, mods: list, force: bool = False) -> dict:
     """mods 传 ScanResult.mods。返回冲突报告。"""
-    key = str(root).lower()
+    # 缓存 key 必须带上当前语言：报告里的 title/detail 是后端按语言渲染好的
+    # 字符串，1.2.8 双语后若只按目录缓存，切换语言后 90 秒内命中的还是
+    # 旧语言的整套文案 —— 界面骨架翻了、卡片正文全是旧语言，看起来像没翻译。
+    key = f"{str(root).lower()}\x00{i18n.current()}"
     now = time.time()
     if not force:
         hit = _cache.get(key)
