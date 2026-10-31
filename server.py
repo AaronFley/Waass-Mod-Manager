@@ -147,6 +147,11 @@ class State:
         self.scan_result = None
         self.scanning = False
         self.last_error = ""
+        # 全量扫描的排队锁 + 已完成次数。两个线程（启动时那一个、用户点
+        # 「重新扫描」那一个）同时进来时，一个扫、另一个直接等结果 ——
+        # 否则同一份磁盘被读两遍，self.scan_result 也会互相覆盖。
+        self._scan_lock = threading.Lock()
+        self._scan_gen = 0
         self._dl: dict | None = None
         self._dl_at = 0.0
 
@@ -183,6 +188,16 @@ class State:
             return {"items": [], "by_mod": {}, "stats": {}, "error": str(exc)}
 
     def refresh(self) -> None:
+        """重扫一遍模组列表。并发调用会被排队，且不重复扫。"""
+        gen = self._scan_gen
+        with self._scan_lock:
+            if self._scan_gen > gen:
+                # 排队这段时间里别人已经扫完了，结果就是最新的，别再读一遍盘
+                return
+            self._scan_gen += 1
+            self._scan_once()
+
+    def _scan_once(self) -> None:
         root = self.game_root()
         self.drop_downloads_cache()
         conflicts.drop_cache()
@@ -449,6 +464,21 @@ class Handler(BaseHTTPRequestHandler):
             self._send(*_json({"error": "unauthorized"}, 401))
             return False
         return True
+
+    # ---------- 不支持的方法 ----------
+    # BaseHTTPRequestHandler 默认回 501 + 一页 HTML。前端只解析 JSON，一个
+    # <html> 会把「方法不对」变成「解析失败」，出问题时看到的就不是原因。
+    # 这个接口集只认 GET / POST，其余明确说 405，并带上 Allow。
+    def _method_not_allowed(self):
+        self._send(*_json({"error": "method_not_allowed",
+                           "code": "method_not_allowed",
+                           "allow": "GET, POST"}, 405),
+                   extra={"Allow": "GET, POST"})
+
+    do_PUT = _method_not_allowed
+    do_DELETE = _method_not_allowed
+    do_PATCH = _method_not_allowed
+    do_OPTIONS = _method_not_allowed
 
     # ---------- 路由 ----------
     def do_GET(self):
@@ -1222,6 +1252,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(*_json({"ok": True, "cleared": True}))
             try:
                 picked = picker.pick("exe")
+            except picker.PickError:
+                return self._send(*_json({"error": i18n.t("srv.pick_unavailable"),
+                                          "code": "picker_unavailable"}, 500))
             except OSError as e:
                 return self._send(*_json({"error": i18n.t("srv.picker_open_failed", err=e)}, 500))
             if not picked:
@@ -1346,6 +1379,11 @@ class Handler(BaseHTTPRequestHandler):
             kind = str(body.get("kind") or "file")
             try:
                 picked = _tk_dialog(kind)
+            except picker.PickError:
+                # 三条路都不通（原生框被策略禁用、也没有 Tk）。这不该是 500 加
+                # 一句英文异常 —— 用户能做的事只有一件：直接粘贴路径。
+                return self._send(*_json({"error": i18n.t("srv.pick_unavailable"),
+                                          "code": "picker_unavailable"}, 500))
             except Exception as e:                       # noqa: BLE001 没有 GUI 环境
                 return self._send(*_json({"error": i18n.t("srv.dialog_open_failed", err=e)}, 500))
             return self._send(*_json({"ok": True, "path": picked}))

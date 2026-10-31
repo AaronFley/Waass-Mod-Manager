@@ -1746,8 +1746,8 @@ silent no-op.
 
 ### 24.1 Source and boundaries
 
-The design files live in `D:/AI claw\2026-10-28-22-24-23\waass-icon` (with
-`WAASS-ICON-SPEC.md` attached, Chinese only): dark-gray ground + gold W wordmark,
+The design files live in a local `waass-icon` folder (with `WAASS-ICON-SPEC.md`
+attached, Chinese only; kept on the development machine, not in the repo): dark-gray ground + gold W wordmark,
 three gold tiers `#FEEAAA / #E9B45F / #D99139`, three dark tiers
 `#1E1E1E / #343636 / #0A0A0A`. The user set two boundaries explicitly: **use the
 icon as-is** (no redrawing, no changes to the `waass.ico` container) and
@@ -2650,3 +2650,67 @@ moment the user clicked install — which is meaningless to a non-technical user
 The pre-release checklist must contain these three lines: **no `data/` in the build**,
 **no author-machine paths in source or docs**, **plain language when permission is
 denied**.
+
+---
+
+## 33. 1.3.0: bugs that only happen once packaged (2026-10-31)
+
+No new features. This release deals with a class of bug that works perfectly from
+source and breaks only inside the exe — where "build succeeded", "all tests green"
+and "the exe starts" were all blind to it.
+
+### 33.1 Folder picking must not depend on tkinter
+
+In the 1.2.9 exe, "Browse for folder" returned 500: `No module named 'tkinter'`.
+The code was not wrong; a comment in `build.py` — "keep tkinter, the folder picker
+needs it" — was never verified. The CPython used for building has no Tcl/Tk, and
+PyInstaller only packages what the import graph contains: present from source,
+absent in the exe.
+
+The rules now:
+
+* `core/picker.py` opens folders with `IFileOpenDialog` (`CLSID_FileOpenDialog` +
+  `FOS_PICKFOLDERS`), calling vtables through plain ctypes — no third-party library;
+* order: native dialog → `SHBrowseForFolderW` → tkinter. **"Unavailable" and
+  "cancelled" must stay distinct** (`None` vs `""`), otherwise cancelling pops a
+  second Tk dialog;
+* if none of the three works, `PickError(code="picker_unavailable")` is raised and
+  the UI says "paste the path into the field" instead of showing the raw `ImportError`;
+* `picker.probe()` creates the object without showing it, for the build check.
+
+### 33.2 Only one writer may advance the data version
+
+`compat.touch()` used to run `setdefault("schema", SCHEMA)` while recording "this
+build has run". Consequence: the backup fails → migration correctly stops and warns
+→ but the schema is stamped as new → the next launch reports `ok`, the warning
+disappears, and the failed migration is never retried.
+
+Rule: **only a successful `prepare()` may change `meta["schema"]`**. `touch()` writes
+`app` / `last_seen` and nothing else. On failure `prepare()` returns early without
+touching meta, so the next launch retries the backup and warns again. Regression
+test: `tests/test_compat.py` section [10].
+
+### 33.3 Ask the exe what it can do
+
+After packaging, `build.py` runs
+`Waass-x.y.z.exe --check --check-out build/execheck.json`:
+
+| Check | Failure code |
+| --- | --- |
+| UI assets (`templates/index.html`, `app.js`, `style.css`, `settings.js`, both `i18n` files) | `web_assets` |
+| The 8 core modules really import | `modules_import_failed` |
+| Picker backend (`probe()`) | `no_picker_backend` |
+
+The verdict goes to a file (a `--windowed` exe has no stdout); a non-zero exit code
+fails the build. `--check` does not start the server, open a window or take the
+single-instance mutex.
+
+### 33.4 Two smaller closures
+
+* **Unsupported methods return JSON 405** with `Allow: GET, POST`. The default
+  implementation answers 501 with an HTML page, and the UI only parses JSON — that
+  turns "wrong method" into "parse error".
+* **Full scans are serialised**: `State.refresh()` queues on `_scan_lock` and
+  de-duplicates via `_scan_gen` — if another scan finished while this caller was
+  waiting, its result is reused. The disk is not read twice and `scan_result` cannot
+  be overwritten mid-flight.

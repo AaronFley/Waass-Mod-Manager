@@ -823,6 +823,7 @@
   "srv.only_nexus_links": "只允许打开 Nexus 的链接",
   "srv.pick_merger_exe": "要选 Script Merger 的 .exe",
   "srv.pick_mods_first": "先勾选要汉化的模组",
+  "srv.pick_unavailable": "这台电脑开不了选择框（系统对话框组件不可用），直接把路径粘贴到输入框里就行",
   "srv.picker_open_failed": "打不开文件选择框：{err}",
   "srv.priority_must_be_int": "优先级必须是整数",
   "srv.prios_must_be_array": "prios 必须是数组",

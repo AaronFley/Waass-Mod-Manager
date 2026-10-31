@@ -314,21 +314,27 @@ def touch(app_version: str) -> str:
     """记下「这一版跑过了」，返回上一次记录的程序版本（自检用它判断刚被更新）。
 
     返回空串表示第一次运行（没有记录）。
+
+    **只写 app / last_seen，绝不动 schema。**
+    1.2.9 的错误：这里写了 `meta.setdefault("schema", SCHEMA)`，于是「备份失败
+    就不迁移」这条承诺被这句话悄悄作废 —— 迁移没做，schema 却被标成了新版，
+    下次启动 state() 报 ok，用户再也不会收到告警，失败的那次迁移也不会重试。
+    数据版本只有一个推进者：成功的 `prepare()`。
     """
     meta = read_meta() or {}
     prev = str(meta.get("app") or "")
+    now = time.strftime("%Y-%m-%dT%H:%M:%S")
     if prev == app_version:
         # 同一版重复启动不刷 history，只更新 last_seen
-        meta["last_seen"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-        try:
-            _write_meta(meta)
-        except Exception:                           # noqa: BLE001
-            pass
+        if meta.get("last_seen") != now:
+            meta["last_seen"] = now
+            try:
+                _write_meta(meta)
+            except Exception:                       # noqa: BLE001
+                pass
         return prev
     meta["app"] = app_version
-    meta["last_seen"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-    meta.setdefault("schema", SCHEMA)
-    meta.setdefault("first_seen", meta["last_seen"])
+    meta["last_seen"] = now
     try:
         _write_meta(meta)
     except Exception:                               # noqa: BLE001

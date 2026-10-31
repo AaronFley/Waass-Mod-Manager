@@ -167,8 +167,11 @@ def run(app_version: str, compat_report: dict | None = None) -> dict:
                       "params": {"file": name}})
     if "backup_failed" in notes:
         items.append({"code": "backup_failed", "level": "error", "params": {}})
-    if any(n.startswith("no_step_for") or "_failed" in n for n in notes
-           if not n.startswith("quarantined:")):
+    # 迁移/隔离过程中的失败单独说一句。注意别拿 "_failed" 一概而论：
+    # "backup_failed" 本身也带这几个字母，会把一句问题说成两句。
+    step_bad = [n for n in notes if n.startswith(("no_step_for", "step_", "mkdir_failed",
+                                                  "quarantine_failed"))]
+    if step_bad:
         items.append({"code": "compat_step_failed", "level": "error", "params": {}})
 
     # ---- 版本与数据之间的那几句话，是整个模块的重点 ----

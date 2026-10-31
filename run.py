@@ -5,6 +5,8 @@
     python run.py --browser       强制用默认浏览器
     python run.py --serve-only    只起服务，不开界面（调试用）
     python run.py --port 8765     指定端口
+    python run.py --check --check-out <文件>
+                                  只做打包后能力自检，不启动界面（build.py 用）
 
 关于那个「正在你的所有设备上同步你的浏览数据」弹窗
 --------------------------------------------------
@@ -175,7 +177,16 @@ def main() -> int:
     ap.add_argument("--port", type=int, default=0)
     ap.add_argument("--browser", action="store_true")
     ap.add_argument("--serve-only", action="store_true")
+    # 打包后能力自检：只回答「这份 exe 现在能干什么」，不起服务、不开窗口。
+    # 结论写文件（--windowed 的 exe 没有 stdout），退出码 0 才算能发布。
+    ap.add_argument("--check", action="store_true")
+    ap.add_argument("--check-out", default="")
     args = ap.parse_args()
+
+    if args.check:
+        from core import execheck
+        out = Path(args.check_out) if args.check_out else Path("execheck.json")
+        return execheck.write_report(out)
 
     _crash_hook()
 

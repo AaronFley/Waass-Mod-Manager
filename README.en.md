@@ -4,13 +4,16 @@ A lightweight mod manager for The Witcher 3 Remastered. Standard library only, t
 
 ![Main window](docs/screenshots/1.2.5/01-dark-main.png)
 
-> **Recent update (1.2.9)**: upgrading is now just "swap the exe". A new build backs
-> up your existing data in full before migrating it, renames unreadable files instead
-> of deleting them, and runs a self-check on every launch — program updates and data
-> problems are reported right in the top banner (red ones can't be dismissed).
-> Previous release (1.2.8): the interface speaks English, one-click toggle, roughly
-> 960 strings bilingual, native English docs. Earlier (1.2.7): fixed the background
-> process that survived a closed window.
+> **Recent update (1.3.0)**: two bugs that only show up once packaged are fixed —
+> "Browse for folder" failed inside the exe (now a native Windows dialog, no Tk
+> dependency), and a failed migration was recorded as completed (only a successful
+> migration advances the data version now; failures retry and keep warning on the
+> next launch). The build now ends by asking the exe what it can actually do, and
+> fails if anything is missing. Data format remains v3, so a 1.2.9 `data/` folder
+> works as-is.
+> Previous release (1.2.9): upgrading is just "swap the exe" — full backup, then
+> migrate; a self-check on every launch reports program updates and data problems in
+> the top banner (red ones can't be dismissed).
 > Full history: [CHANGELOG.md](CHANGELOG.md) (Chinese) · [CHANGELOG.en.md](CHANGELOG.en.md).
 
 ## System requirements

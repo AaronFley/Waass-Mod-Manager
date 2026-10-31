@@ -139,6 +139,27 @@ def main() -> int:
             check("等于 APP_VERSION",
                   server.Handler.server_version == f"Waass/{appinfo.APP_VERSION}",
                   server.Handler.server_version)
+
+            print("\n[8] 不支持的方法回 JSON 405，不是 501 HTML")
+            for m in ("PUT", "DELETE", "PATCH"):
+                c = http.client.HTTPConnection("127.0.0.1", port, timeout=8)
+                c.request(m, "/api/state", body=b"{}",
+                          headers={"Host": local,
+                                   "X-Waass-Token": server.TOKEN,
+                                   "Content-Type": "application/json"})
+                r = c.getresponse()
+                body = r.read()
+                c.close()
+                check(f"{m} → 405", r.status == 405, r.status)
+                check(f"{m} 响应是 JSON", (r.getheader("Content-Type") or "")
+                      .startswith("application/json"), r.getheader("Content-Type"))
+                try:
+                    ok = json.loads(body).get("code") == "method_not_allowed"
+                except ValueError:
+                    ok = False
+                check(f"{m} 带稳定 code", ok, body[:80])
+                check(f"{m} 带 Allow 头", "POST" in (r.getheader("Allow") or ""),
+                      r.getheader("Allow"))
         finally:
             httpd.shutdown()
 

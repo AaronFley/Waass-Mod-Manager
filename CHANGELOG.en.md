@@ -2,6 +2,41 @@
 
 The version number is maintained in a single place, `core/appinfo.py`, and is written into the exe's file properties at build time.
 
+## 1.3.0 — 2026-10-31
+
+**This release fixes the class of bug that only appears once you package.**
+The data format is still v3, so a 1.2.9 `data/` folder works as-is — just swap
+the exe.
+
+- **Fixed: "Browse for folder" was broken in the packaged exe.** The 1.2.9 build
+  worked from source but returned 500 when packaged: the CPython used for building
+  has no Tcl/Tk, so `import tkinter` succeeds from source and the module is simply
+  missing inside the exe — and "build succeeded", "all tests green" and "the exe
+  starts" were all blind to it. Folder picking now uses Windows' own dialog
+  (`IFileOpenDialog`, with an address bar and search), independent of whether the
+  interpreter ships Tcl/Tk; the legacy folder browser and tkinter are fallbacks.
+  If none of the three works, the UI says "paste the path instead" rather than
+  showing `No module named 'tkinter'`.
+- **Fixed: a failed migration was recorded as done.** When the backup can't be
+  written (disk full, folder occupied, read-only), the app correctly stops without
+  migrating and warns — but the step that records "this build has run" also stamped
+  the data format as the new version. The next launch looked healthy, the failure
+  was swallowed for good, and no retry ever happened. **Only a successful migration
+  may advance the data version now**; a failure stays where it is and keeps warning
+  on every launch.
+- **A capability check at the end of the build**: the produced exe is asked what it
+  can actually do (`Waass.exe --check`) — UI assets, core modules and the picker
+  backend, one by one. Missing any of them fails the build, so "built fine but half
+  broken" can't be shipped.
+- **Unsupported methods return JSON 405** instead of a 501 HTML page for
+  `PUT /api/state` (the UI only parses JSON; an `<html>` body turns "wrong method"
+  into "parse error").
+- **Full scans are serialised**: when the startup scan and a manual "Rescan"
+  collide, one scans and the other reuses the result — the same disk isn't read
+  twice, and the scan result can't be overwritten mid-flight.
+- Absolute paths from the author's machine were replaced with neutral wording in
+  the public docs.
+
 ## 1.2.9 — 2026-10-30
 
 **Upgrading is now just "swap the exe".** This release turns "will my data survive

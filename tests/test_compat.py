@@ -185,6 +185,38 @@ def main() -> int:
     rep8 = selfcheck.run("1.2.9")
     check("能写的时候不打扰", "game_readonly" not in [i["code"] for i in rep8["items"]])
 
+    # ---- 备份失败：绝不能把 schema 标成新版（1.3.0 修的洞）----
+    # 场景：老数据（无 meta）第一次被新版程序打开，备份写不进去（磁盘满、
+    # 目录被占、只读）。1.2.9 的表现是「报一次错，然后把 schema 写成 3」，
+    # 下次启动一切正常 —— 失败被永久吞掉。
+    reset(files={"config.json": json.dumps({"lang": "zh"})})
+    block = DATA / "_backup"
+    block.write_text("拿一个文件占住 _backup，模拟备份失败", encoding="utf-8")
+
+    rep9 = compat.prepare("1.3.0")
+    check("备份失败被如实报告", "backup_failed" in (rep9.get("notes") or []),
+          str(rep9.get("notes")))
+    check("没有宣称迁移过", rep9.get("migrated") is False)
+    check("meta 里没有凭空出现 schema", not compat.read_meta().get("schema"),
+          str(compat.read_meta()))
+
+    selfcheck.run("1.3.0")          # 自检内部会 touch
+    check("touch 之后仍是 legacy（下次还会重试）",
+          compat.state()["kind"] == "legacy", compat.state()["kind"])
+
+    rep10 = selfcheck.run("1.3.0")
+    codes10 = [i["code"] for i in rep10["items"]]
+    check("第二次启动仍然报警", "backup_failed" in codes10, str(codes10))
+    check("只报一次，不重复成两条", "compat_step_failed" not in codes10, str(codes10))
+
+    block.unlink()
+    rep11 = compat.prepare("1.3.0")
+    check("障碍移除后迁移成功", rep11.get("migrated") is True, str(rep11.get("notes")))
+    check("迁移成功才把 schema 推到 3", compat.state()["kind"] == "ok",
+          compat.state()["kind"])
+    check("备份真的落盘了", bool(rep11.get("backup")) and Path(rep11["backup"]).is_dir(),
+          str(rep11.get("backup")))
+
     print(f"\n通过 {PASS} 项，失败 {FAIL} 项")
     return 0 if FAIL == 0 else 1
 

@@ -23,8 +23,8 @@ from pathlib import Path
 from core import i18n
 
 APP_NAME = "Waass Mod Manager"
-APP_VERSION = "1.2.9"
-APP_DATE = "2026-10-30"
+APP_VERSION = "1.3.0"
+APP_DATE = "2026-10-31"
 APP_REPO = ""                     # 发布后填 GitHub 地址
 LICENSE = "MIT"
 

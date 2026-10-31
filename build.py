@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -71,6 +72,14 @@ def main() -> int:
 
     from core.appinfo import APP_NAME, APP_VERSION
 
+    # 构建机自己有没有对话框能力，先亮出来 —— 打完之后 exe 里有没有，
+    # 由下面的 smoke() 证明，这一步只是让人看到前提。
+    try:
+        from core import picker
+        print(f"构建机选择框后端：{picker.probe() or '无（exe 会缺这个功能）'}")
+    except Exception as exc:                        # noqa: BLE001
+        print(f"选择框后端探测失败：{type(exc).__name__}: {exc}")
+
     exe_name = f"Waass-{APP_VERSION}"
     icon = ROOT / "web" / "static" / "icon.ico"
     if not icon.is_file():
@@ -84,8 +93,10 @@ def main() -> int:
         "--name", exe_name,
         "--add-data", f"web{SEP}web",
         "--version-file", str(version_file(APP_VERSION, APP_NAME, exe_name + ".exe")),
-        # 只排掉确定用不上的科学计算库；tkinter 要留着 ——
-        # 设置里的「浏览选择…」靠它弹系统的选目录框
+        # 只排掉确定用不上的科学计算库。
+        # 注意这里**没有**任何「要留着 tkinter」的说法：1.2.9 就是信了这句话，
+        # 而打包机上的 Python 根本没带 Tcl/Tk，结果 exe 的选目录功能是坏的。
+        # 选目录现在走 Windows 自己的 COM 对话框（core/picker.py），不依赖它。
         "--exclude-module", "numpy",
         "--exclude-module", "PIL",
         "--exclude-module", "pandas",
@@ -103,13 +114,51 @@ def main() -> int:
         return r.returncode
 
     exe = ROOT / "dist" / f"{exe_name}.exe"
-    if exe.is_file():
-        mb = exe.stat().st_size / 1024 / 1024
-        print(f"\n完成：{exe}（{mb:.1f} MB）")
-        print("双击就能运行，没有黑框。数据会放在 exe 同目录的 data/ 里。")
-        return 0
-    print("没找到产物，看看上面的报错")
-    return 1
+    if not exe.is_file():
+        print("没找到产物，看看上面的报错")
+        return 1
+
+    mb = exe.stat().st_size / 1024 / 1024
+    print(f"\n完成：{exe}（{mb:.1f} MB）")
+
+    # 打包成功 ≠ 功能齐全。必须问 exe 自己一句。
+    if not smoke(exe):
+        return 1
+    print("双击就能运行，没有黑框。数据会放在 exe 同目录的 data/ 里。")
+    return 0
+
+
+def smoke(exe: Path) -> bool:
+    """跑一遍 exe 的能力自检（--check），缺东西就别让人发出去。"""
+    out = ROOT / "build" / "execheck.json"
+    out.unlink(missing_ok=True)
+    print("\n打包后自检：问 exe 自己「你现在能干什么」……")
+    try:
+        r = subprocess.run([str(exe), "--check", "--check-out", str(out)],
+                           cwd=str(ROOT), timeout=120)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"  起不来：{type(exc).__name__}: {exc}")
+        return False
+    try:
+        rep = json.loads(out.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        print(f"  没拿到自检结果（退出码 {r.returncode}）")
+        return False
+
+    d = rep.get("detail") or {}
+    print(f"  版本 {d.get('version')} / picker={d.get('picker')} / "
+          f"frozen={d.get('frozen')}")
+    if d.get("web", {}).get("missing"):
+        print(f"  缺界面文件：{', '.join(d['web']['missing'])}")
+    if d.get("modules", {}).get("broken"):
+        for k, v in d["modules"]["broken"].items():
+            print(f"  模块导入失败：{k} → {v}")
+    if rep.get("ok"):
+        print("  通过：界面资源、核心模块、选择框后端都在。")
+        return True
+    print(f"  失败：{', '.join(rep.get('fatal') or ['unknown'])}")
+    print("  这份 exe 不要发布。")
+    return False
 
 
 if __name__ == "__main__":

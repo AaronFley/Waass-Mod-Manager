@@ -1440,7 +1440,8 @@ favicon 的 `?v=4` 提到 `?v=5`，否则 Edge 会继续用缓存里的旧图。
 
 ### 24.1 来源与边界
 
-设计稿在 `D:/AI claw\2026-10-28-22-24-23\waass-icon`（附 `WAASS-ICON-SPEC.md`）：
+设计稿目录为 `waass-icon`（另附 `WAASS-ICON-SPEC.md`，只在开发机保留，
+不进仓库）：
 深灰底 + 金色 W 字标，三阶金色 `#FEEAAA / #E9B45F / #D99139`，三阶深色
 `#1E1E1E / #343636 / #0A0A0A`。用户明确两条边界：**图标原样使用**（不重绘、不改
 `waass.ico` 容器）、**双主题但默认深色**。
@@ -2195,3 +2196,58 @@ Steam 默认把游戏装在 `C:/Program Files (x86)`，普通用户对那里只�
 
 发布前复查清单里必须有这三条：**打包产物里没有 `data/`**、**源码与文档里没有
 作者本机路径**、**权限不足时界面说人话**。
+
+---
+
+## 33. 1.3.0：打包才会犯的错（2026-10-31）
+
+这一版没有新功能。它处理的是「源码里跑得好、打包出来就坏」这一类问题 ——
+三次「通过」（构建成功、测试全绿、exe 能启动）都没发现它们。
+
+### 33.1 选目录不能依赖 tkinter
+
+1.2.9 的 exe 里点「浏览选择文件夹」返回 500：`No module named 'tkinter'`。
+根因不是代码写错，而是 `build.py` 里一句注释 ——「tkinter 要留着」—— 从来没被
+验证过：构建用的 CPython 根本没编 Tcl/Tk，PyInstaller 只是照着 import 图打包，
+源码环境有、exe 里没有。
+
+现在的规矩：
+
+* `core/picker.py` 选目录走 `IFileOpenDialog`（`CLSID_FileOpenDialog` +
+  `FOS_PICKFOLDERS`），纯 ctypes 走 vtable，不引第三方库；
+* 顺序是 原生框 → `SHBrowseForFolderW` → tkinter。**「用不了」和「用户取消」
+  必须区分**（`None` vs `""`），否则一取消就会再弹一个 Tk 框；
+* 三条都不通时抛 `PickError(code="picker_unavailable")`，界面说「把路径粘贴
+  到输入框里」，绝不把 `ImportError` 原文甩给用户；
+* `picker.probe()` 只建对象不弹窗，供打包自检使用。
+
+### 33.2 数据版本只有一个推进者
+
+`compat.touch()` 曾经在写「这一版跑过了」时顺手 `setdefault("schema", SCHEMA)`。
+后果：备份失败 → 正确地停止迁移并报警 → 但 schema 被标成新版 → 下次启动
+`state()` 报 ok，告警消失，失败不会重试。
+
+规矩：**只有成功的 `prepare()` 能改 `meta["schema"]`**。`touch()` 只写
+`app` / `last_seen`。迁移失败时 `prepare()` 提前返回、不写 meta，下次启动
+继续备份、继续报警。回归测试在 `tests/test_compat.py` 的 [10]。
+
+### 33.3 构建完要问 exe 自己
+
+`build.py` 打包成功后跑 `Waass-x.y.z.exe --check --check-out build/execheck.json`：
+
+| 检查 | 缺失时 |
+| --- | --- |
+| 界面资源（`templates/index.html`、`app.js`、`style.css`、`settings.js`、两份 `i18n`） | `web_assets` |
+| 核心模块能否真的导入（8 个） | `modules_import_failed` |
+| 选择框后端（`probe()`） | `no_picker_backend` |
+
+结论写文件（`--windowed` 的 exe 没有 stdout），退出码非 0 就是构建失败。
+`--check` 模式不起服务、不开窗口、不建单实例互斥体。
+
+### 33.4 另外两条收口
+
+* **不支持的方法回 JSON 405**（`Allow: GET, POST`）。默认实现是 501 + 一页
+  HTML，前端只解析 JSON，那会把「方法不对」变成「解析失败」。
+* **全量扫描串行化**：`State.refresh()` 用 `_scan_lock` 排队，并靠 `_scan_gen`
+  去重 —— 排队期间别人已经扫完就直接用结果，同一份磁盘不读两遍，
+  `scan_result` 也不会被并发覆盖。
