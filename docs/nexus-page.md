@@ -8,8 +8,11 @@ Description 编辑器、粘进 GitHub、粘进任何地方都是这个样子，�
 
 Waass Mod Manager
 
-《巫师 3：狂猎》重制版的模组管理器。一个 9 MB 的单文件 exe，双击就能用，
-不需要安装，不需要 .NET，不需要别的管理器。
+《巫师 3：狂猎》重制版的模组管理器。**面向中文玩家**：在中文环境里开发，带一个
+别家没有的功能 —— 汉化模组（语言表、脚本、菜单 XML 三条通道都能处理）；界面
+同时提供完整英文版，英文玩家同样能用。
+
+一个 9 MB 的单文件 exe，双击就能用，不需要安装，不需要 .NET，不需要别的管理器。
 
 · 它是什么
 
@@ -85,15 +88,17 @@ Windows 10 / 11（64 位）。巫师 3 重制版 v5.x，Steam / GOG / Epic 都�
 
 · 许可
 
-MIT。
+MIT。这是一个开源项目，绝大部分代码由 AI 构建。欢迎任何人下载、改动、分享，
+甚至为它做其他语言的本地化 —— 界面文案就是两份 JSON，照着加一份就是一门新
+语言。有重要 BUG 请在 GitHub 提 issue，我会持续改进。
 
 ---
 
 （以上是页面正文，下面这段是给自己的备注，不要粘进 Nexus）
 
-配图建议：主界面 `docs/screenshots/1.2.5/01-dark-main.png`、
-使用说明 `docs/screenshots/1.2.6/01-guide.png`、
-汉化面板 `docs/screenshots/1.2.5/03-dark-localize.png`。
+配图建议：主界面 `docs/screenshots/1.3.0/01-main-zh.png`、
+英文界面 `docs/screenshots/1.3.0/02-main-en-light.png`、
+使用说明 `docs/screenshots/1.3.0/03-guide-zh.png`。
 Nexus 的 Description 编辑器吃 BBCode，图片用 `[img]` 引用图床地址 ——
 页面上的图要单独上传到 Nexus 的 Images 里再拷链接。
 

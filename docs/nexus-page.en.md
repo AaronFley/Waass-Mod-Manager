@@ -6,7 +6,9 @@ Intro text for the Nexus Mods page. **Plain text throughout, no markup of any ki
 
 Waass Mod Manager
 
-A mod manager for The Witcher 3 Remastered. A single 9 MB exe, double-click and it works. No installation, no .NET, no other manager required.
+A mod manager for The Witcher 3 Remastered, **built for Chinese players**: developed in a Chinese-language environment, with a feature most managers don't have — CN localization of mods (language tables, scripts and menu XML, all three handled). The whole interface is also available in English, so English-speaking players can use it too.
+
+A single 9 MB exe, double-click and it works. No installation, no .NET, no other manager required.
 
 · WHAT IT IS
 
@@ -52,15 +54,15 @@ This program will not decide which mods you should install, and it will not "opt
 
 · LICENSE
 
-MIT.
+MIT. This is an open-source project, and most of its code was built with AI. Anyone is welcome to download it, change it, share it, or localize it into another language — the UI strings are just two JSON files, so adding one more makes a new language. For significant bugs, please open an issue on GitHub; I keep improving it.
 
 ---
 
 (The text above is the page body. What follows is a note to self — do not paste into Nexus.)
 
-Suggested images: main window docs/screenshots/1.2.5/01-dark-main.png,
-guide docs/screenshots/1.2.6/01-guide.png,
-translation panel docs/screenshots/1.2.5/03-dark-localize.png.
+Suggested images: main window docs/screenshots/1.3.0/01-main-zh.png,
+English UI docs/screenshots/1.3.0/02-main-en-light.png,
+guide docs/screenshots/1.3.0/04-guide-en.png.
 Nexus' Description editor takes BBCode; reference images with [img] using image-host URLs —
 upload each image to Nexus' Images section first, then copy the link.
 

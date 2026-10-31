@@ -1,6 +1,10 @@
 # Waass Mod Manager
 
-A lightweight mod manager for The Witcher 3 Remastered. Standard library only, touches only what it must, and every step can be undone.
+A mod manager for The Witcher 3 Remastered, **built for Chinese players**: developed
+in a Chinese-language environment, with a feature most managers don't have —
+**CN localization of mods** (menu XML, scripts and string tables, all three handled);
+the whole interface is also available in English, so English-speaking players can use
+it too. Standard library only, touches only what it must, and every step can be undone.
 
 ![Main window](docs/screenshots/1.3.0/02-main-en-light.png)
 
@@ -421,6 +425,18 @@ The latter is a self-made JSON: `{"version": "1.3.0", "url": "download page", "n
 To turn online checks off entirely, set `{"update_check": false}`.
 
 ---
+
+## About this project
+
+This is an **open-source MIT project**, and most of its code was built with AI.
+Anyone is welcome to download it, change it, share it, or localize it into another
+language — every UI string lives in `web/i18n/zh.json` and `en.json`; add one more
+file and you have a new language (the backend reads the same key table, so no code
+changes are needed).
+
+For significant bugs, please open an
+[issue](https://github.com/AaronFley/Waass-Mod-Manager/issues) — I keep improving
+this project.
 
 ## License
 

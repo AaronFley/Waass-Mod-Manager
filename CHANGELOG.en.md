@@ -44,6 +44,11 @@ the exe.
 - README screenshots are real 1.3.0 captures (one set per language), plus GitHub
   Actions: all tests, both cold starts and the source-mode capability check on
   Windows.
+- **The project description now states what it is**: built for Chinese players,
+  developed in a Chinese-language environment, with the CN-localization feature
+  other managers don't have — and a complete English UI as well. The closing
+  section says it plainly: MIT, most code built with AI, and anyone is welcome to
+  change it, share it or localize it into another language.
 
 ## 1.2.9 — 2026-10-30
 
