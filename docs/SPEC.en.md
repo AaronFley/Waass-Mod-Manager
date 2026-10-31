@@ -2479,7 +2479,7 @@ was numbers that mismatched; this time, colors and semantics.
 ### Documentation
 
 Native English, not a literal translation: `guide.en.html` (loaded automatically
-in the English UI), `README.en.md`, `CHANGELOG.en.md` and this file's English
+in the English UI), the English half of `README.md`, `CHANGELOG.en.md` and this file's English
 counterpart. English users do not install localization packs, so "CN
 localization" is presented as a feature (translating English mods into the
 community's Chinese), not a tutorial.
@@ -2588,7 +2588,7 @@ facts a user can report precisely.
 > **Any feature addition, removal or behaviour change must update both the Chinese
 > and the English documentation.**
 
-Scope: `web/static/guide.html` + `guide.en.html`, `README.md` + `README.en.md`,
+Scope: `web/static/guide.html` + `guide.en.html`, `README.md` (bilingual single file),
 `CHANGELOG.md` + `CHANGELOG.en.md`, `docs/SPEC.md` + `docs/SPEC.en.md`.
 Updating only one side leaves half the users with a wrong description — worse than
 no description at all.

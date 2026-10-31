@@ -2048,7 +2048,7 @@ HTTP 层验证六种时序全过；真机连切两次语言 + 跨宽限期开面
 
 ### 文档口径
 
-原生英文，不逐句直译：`guide.en.html`（英文界面自动读）、`README.en.md`、
+原生英文，不逐句直译：`guide.en.html`（英文界面自动读）、`README.md` 的英文半部、
 `CHANGELOG.en.md`、`docs/SPEC.en.md`。英文读者不装汉化，「CN localization」
 按功能视角介绍。SPEC 本节同步译到 SPEC.en.md §30。
 
@@ -2141,7 +2141,7 @@ HTTP 层验证六种时序全过；真机连切两次语言 + 跨宽限期开面
 
 > **任何增删功能或行为改动，必须同时更新中英文两份说明文字。**
 
-范围：`web/static/guide.html` + `guide.en.html`、`README.md` + `README.en.md`、
+范围：`web/static/guide.html` + `guide.en.html`、`README.md`（双语同文件）、
 `CHANGELOG.md` + `CHANGELOG.en.md`、`docs/SPEC.md` + `docs/SPEC.en.md`。
 只改一边等于给另一半用户留了个错说明，比不写更糟。
 

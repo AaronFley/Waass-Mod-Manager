@@ -64,4 +64,4 @@ Suggested images: main window docs/screenshots/1.3.0/01-main-zh.png, English UI 
 
 The Nexus Description editor accepts BBCode; reference images with [img] using image-host URLs — upload each image to the Nexus Images section first, then copy the link.
 
-GitHub uses README.md / README.en.md rather than this file. This one is meant to be short and render-independent: plain text that survives pasting anywhere without deforming.
+GitHub uses README.md, which carries both languages in one file (English first), rather than this file. This one is meant to be short and render-independent: plain text that survives pasting anywhere without deforming.
