@@ -5,6 +5,22 @@ Chinese version: [CHANGELOG.md](CHANGELOG.md).
 
 The version number is maintained in one place, `core/appinfo.py`.
 
+## 1.3.1 — 2026-10-31
+
+**Program update checks are now a standing feature: checked at launch, cached for a day.**
+
+**Added**
+
+- A silent update check runs ten seconds after launch; a new version appears in the top bar and opens the release page in one click.
+- The check in **Settings → About** now shows what changed in the new version.
+
+**Improved**
+
+- Results are cached for 24 hours, so relaunching the same day does not hit the network; once stale, a conditional `ETag` request avoids re-downloading an unchanged release.
+- Manual checks bypass the cache and report failures honestly; automatic checks stay silent and fall back to the previous result.
+- No prompt when the published version is older than the local one, so downgrades and test builds are not misreported.
+- Results are stored in `data/update.json`; deleting the file forces a fresh query.
+
 ## 1.3.0 — 2026-10-31
 
 Data format remains v3, so a 1.2.9 `data/` folder carries over unchanged. Replace the executable to upgrade.

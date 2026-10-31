@@ -2278,3 +2278,24 @@ Windows 控制台默认用本地代码页，英文系统是 cp1252，编不出�
 验证：`tests/test_console.py` 用子进程在 cp1252 下跑四组对照（不做处理会崩 /
 调过能打 / 只 import core 就够 / 重复调用无害）；CI 里另有一条固定步骤
 `PYTHONIOENCODING=cp1252` 跑 `test_console`、`test_lifecycle` 和 `run.py --check`。
+
+## 34. 1.3.1：程序更新检查（2026-10-31）
+
+启动十秒后查一次，结果缓存一天。几个容易写错的地方：
+
+* **缓存文件** `data/update.json`：`{latest, url, notes, etag, ts, checked_at}`。
+  `ts` 是上次真正联网的时间，24 小时内直接复用；`etag` 用于条件请求。
+* **不缓存「要不要更新」这个结论**。`newer` 每次现算（`track.compare`）——
+  程序升级之后缓存里的 latest 可能已经不再是最新，存结论会让顶部提示永远不消失。
+* **304 不是「没有更新」**，是「正文没变」。沿用缓存并把 `ts` 刷新即可；
+  不要去解析 304 的正文（它是空的）。
+* **失败口径分两种**。自动检查（`force=False`）断网时退回上次结论并标 `stale`，
+  界面一个字都不说；手动检查（`force=True`）必须 `ok=False` + 一句人话 ——
+  用户是点了按钮在等结果，断网时说「已是最新」是骗人。
+* **线上比本地旧时不提示**：`compare` 返回 -1 时 `newer=False`，
+  避免把降级或测试版本误报成更新。
+* 前端在 `app.js` 里 `setTimeout(checkAppUpdate, 10000)`，不 await、不占首屏；
+  设置页的手动检查传 `force: true`，并显示这次版本的更新说明。
+* 测试 `tests/test_appinfo.py` 用一个本地 HTTP 服务验证：首次联网、24 小时内不重复、
+  手动不吃缓存、过期后带 `If-None-Match`、服务器回 304 时结论不变、线上更旧不提示、
+  断网的两种口径、关掉检查后完全不联网。

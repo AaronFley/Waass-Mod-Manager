@@ -796,6 +796,7 @@
   "set.storage_total_one": "数据目录总占用 · {n} 个文件",
   "set.up_to_date": "已是最新版本",
   "set.update_link": "去打开发布页",
+  "set.update_notes": "更新内容",
   "srv.archive_not_found": "文件不存在：{path}",
   "srv.bad_mode": "mode 只能是 orig 或 hist",
   "srv.body_too_large": "请求体过大",

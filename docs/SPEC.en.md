@@ -2749,3 +2749,30 @@ Verified by `tests/test_console.py`, which spawns subprocesses under cp1252 for 
 contrasts (crashes without the fix / prints with it / `import core` alone suffices /
 repeated calls are harmless), plus a pinned CI step running `test_console`,
 `test_lifecycle` and `run.py --check` with `PYTHONIOENCODING=cp1252`.
+
+## 34. 1.3.1: program update checks (2026-10-31)
+
+One check ten seconds after launch, results cached for a day. The parts that are easy
+to get wrong:
+
+* **Cache file** `data/update.json`: `{latest, url, notes, etag, ts, checked_at}`.
+  `ts` is the last time the network was actually used, so anything within 24 hours is
+  served from cache; `etag` drives the conditional request.
+* **The verdict is never cached.** `newer` is recomputed from `track.compare` every
+  time — after the app itself is upgraded, the cached `latest` may no longer be newer,
+  and a stored verdict would keep the banner alive forever.
+* **304 does not mean "no updates"**, it means the body is unchanged. Reuse the cache
+  and refresh `ts`; never parse a 304 body (it is empty).
+* **Two failure modes.** An automatic check (`force=False`) falls back to the previous
+  result and marks it `stale`, saying nothing in the UI; a manual check (`force=True`)
+  must return `ok=False` plus a plain-language message — the user pressed a button and
+  is waiting, and "you are up to date" while offline is a lie.
+* **No prompt when the published version is older than the local one**: `compare`
+  returning -1 leaves `newer=False`, so downgrades and test builds are not misreported.
+* The frontend calls `setTimeout(checkAppUpdate, 10000)` in `app.js` without awaiting,
+  so the first screen is never blocked; the manual check in Settings sends
+  `force: true` and renders that release's notes.
+* `tests/test_appinfo.py` uses a local HTTP server to verify: first network call,
+  no repeat within 24 hours, manual checks bypassing the cache, `If-None-Match` once
+  stale, an unchanged result on 304, no prompt for an older published version, both
+  failure modes, and no traffic at all once the check is disabled.

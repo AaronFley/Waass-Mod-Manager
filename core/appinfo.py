@@ -17,14 +17,16 @@ from __future__ import annotations
 import json
 import platform
 import sys
+import time
 import urllib.error
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 from core import i18n
 
 APP_NAME = "Waass Mod Manager"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.3.1"
 APP_DATE = "2026-10-31"
 APP_REPO = "https://github.com/AaronFley/Waass-Mod-Manager"
 
@@ -63,9 +65,18 @@ def _feed() -> str:
     return custom or DEFAULT_FEED
 
 
-def check() -> dict:
-    """查程序自己的新版本。任何失败都返回人能看懂的一句话，不抛异常。"""
-    from .track import compare
+def check(force: bool = False) -> dict:
+    """查程序自己的新版本。任何失败都返回人能看懂的一句话，不抛异常。
+
+    缓存
+    ----
+    结果存 `data/update.json`，24 小时内直接复用；过期后才真正联网，
+    并带上上次的 `ETag` 走条件请求 —— 没变化时服务器只回 304，
+    不重复下载正文。
+
+    自动检查（`force=False`）遇到网络问题就用缓存里的旧结论，界面不报错；
+    手动检查（`force=True`）必须给一句实话，因为用户是点了按钮在等结果。
+    """
     feed = _feed()
     if not feed:
         return {
@@ -73,42 +84,149 @@ def check() -> dict:
             "message": i18n.t("upd.no_feed"),
             "current": APP_VERSION,
         }
-    req = urllib.request.Request(feed, headers={
+
+    cache = _load_cache()
+    fresh = bool(cache.get("latest")) and \
+        time.time() - float(cache.get("ts") or 0) < CACHE_TTL
+    if fresh and not force:
+        return _from_cache(cache, cached=True)
+
+    headers = {
         "User-Agent": f"Waass/{APP_VERSION}",
         "Accept": "application/vnd.github+json, application/json",
-    })
+    }
+    etag = str(cache.get("etag") or "")
+    if etag:
+        headers["If-None-Match"] = etag
+    req = urllib.request.Request(feed, headers=headers)
+
     try:
         with urllib.request.urlopen(req, timeout=8) as r:
             raw = r.read(400_000)
+            new_etag = r.headers.get("ETag") or etag
     except urllib.error.HTTPError as e:
-        # GitHub 在没有正式 Release 时 /releases/latest 返回 404 —— 这不是故障
+        # 304：更新源说「跟你上次问的一样」，直接沿用缓存，不重写正文
+        if e.code == 304 and cache.get("latest"):
+            cache["ts"] = time.time()
+            cache["checked_at"] = _now()
+            _save_cache(cache)
+            return _from_cache(cache, cached=True)
+        # GitHub 在没有正式 Release 时 /releases/latest 返回 404 —— 不是故障
         if e.code == 404:
-            return {"ok": False, "configured": True, "current": APP_VERSION,
-                    "message": i18n.t("upd.feed_not_found")}
-        return {"ok": False, "configured": True, "current": APP_VERSION,
-                "message": i18n.t("upd.feed_unreachable", err=f"HTTP {e.code}")}
+            return _fail("upd.feed_not_found", cache, manual=force)
+        return _fail("upd.feed_unreachable", cache, manual=force, err=f"HTTP {e.code}")
     except Exception as e:                           # noqa: BLE001 网络问题不该崩界面
-        return {"ok": False, "configured": True, "current": APP_VERSION,
-                "message": i18n.t("upd.feed_unreachable", err=type(e).__name__)}
+        return _fail("upd.feed_unreachable", cache, manual=force, err=type(e).__name__)
 
     try:
         data = json.loads(raw.decode("utf-8", errors="replace"))
     except json.JSONDecodeError:
-        return {"ok": False, "configured": True, "current": APP_VERSION,
-                "message": i18n.t("upd.feed_bad_json")}
+        return _fail("upd.feed_bad_json", cache, manual=force)
 
     # GitHub Release 与自制 JSON 两种格式都认
     latest = str(data.get("tag_name") or data.get("version") or "").strip()
     url = str(data.get("html_url") or data.get("url") or "").strip()
     notes = str(data.get("body") or data.get("notes") or "").strip()
     if not latest:
-        return {"ok": False, "configured": True, "current": APP_VERSION,
-                "message": i18n.t("upd.feed_no_version")}
+        return _fail("upd.feed_no_version", cache, manual=force)
 
-    c = compare(latest, APP_VERSION)
+    entry = {
+        "latest": latest, "url": url, "notes": _clean_notes(notes),
+        "etag": new_etag, "ts": time.time(), "checked_at": _now(),
+    }
+    _save_cache(entry)
+    return _from_cache(entry)
+
+
+# ---------------------------------------------------------------------------
+# 缓存
+# ---------------------------------------------------------------------------
+
+CACHE_NAME = "update.json"
+CACHE_TTL = 24 * 3600           # 一天问一次就够了，更新没那么快
+
+
+def _cache_file() -> Path:
+    # 延迟导入：DATA_DIR 由环境变量决定，测试里换目录后才能生效
+    from .paths import DATA_DIR
+    return DATA_DIR / CACHE_NAME
+
+
+def _now() -> str:
+    return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _load_cache() -> dict:
+    try:
+        raw = json.loads(_cache_file().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _save_cache(entry: dict) -> None:
+    p = _cache_file()
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(entry, ensure_ascii=False, indent=1),
+                       encoding="utf-8")
+        tmp.replace(p)
+    except OSError:
+        pass                     # 只读或磁盘满：写不进缓存不影响这次的结果
+
+
+def _from_cache(entry: dict, cached: bool = False, stale: bool = False) -> dict:
+    """把缓存条目还原成接口结果。`newer` 现算 —— 程序升级后缓存可能还是旧的。"""
+    from .track import compare
+    latest = str(entry.get("latest") or "")
+    newer = bool(latest) and compare(latest, APP_VERSION) == 1
     return {
         "ok": True, "configured": True,
         "current": APP_VERSION, "latest": latest,
-        "newer": c == 1, "url": url, "notes": notes[:600],
-        "message": i18n.t("upd.new_version", ver=latest) if c == 1 else i18n.t("upd.up_to_date"),
+        "newer": newer,
+        "url": str(entry.get("url") or ""),
+        "notes": _clean_notes(str(entry.get("notes") or "")),
+        "cached": cached, "stale": stale,
+        "checked_at": str(entry.get("checked_at") or ""),
+        "message": (i18n.t("upd.new_version", ver=latest) if newer
+                    else i18n.t("upd.up_to_date")),
     }
+
+
+def _clean_notes(raw: str) -> str:
+    """更新说明是给界面看的纯文本：去掉 markdown 的结构符号，压掉多余空行。
+
+    Release 正文的排版是给网页用的，直接塞进小框里会是一堆 `##`、表格竖线和星号。
+    """
+    keep: list[str] = []
+    for ln in raw.splitlines():
+        t = ln.strip()
+        if not t:
+            keep.append("")
+            continue
+        if t.startswith("> "):                  # 引用块：留文字，去符号
+            keep.append(t[2:].rstrip())
+            continue
+        if t.startswith(("#", "![", "|", "---", "***")):
+            continue
+        keep.append(ln.rstrip())
+    out = "\n".join(keep).replace("**", "").replace("`", "")
+    while "\n\n\n" in out:
+        out = out.replace("\n\n\n", "\n\n")
+    return out.strip()[:600]
+
+
+def _fail(key: str, cache: dict, manual: bool = False, **kw) -> dict:
+    """联网失败。自动检查退回上一次的结论（标 stale），手动检查如实报错。
+
+    手动检查不能拿旧结论充数：用户是点了按钮在等结果，一句「已是最新」
+    在断网时是骗人的。
+    """
+    if cache.get("latest") and not manual:
+        out = _from_cache(cache, cached=True, stale=True)
+        out["error"] = i18n.t(key, **kw)
+        return out
+    return {"ok": False, "configured": True, "current": APP_VERSION,
+            "message": i18n.t(key, **kw)}
+

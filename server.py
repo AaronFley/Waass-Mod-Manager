@@ -971,7 +971,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(*_json(out))
 
         if path == "/api/app/check":
-            return self._send(*_json(appinfo.check()))
+            # force：用户点了「检查程序更新」。默认走缓存（24 小时内直接答复，
+            # 不联网）；手动检查才真去问一次，并且失败要如实报错。
+            return self._send(*_json(appinfo.check(force=bool(body.get("force")))))
 
         if path == "/api/nexus/autosync":
             # 启动时后台自动同步一次：补封面 + 查有没有新版本。

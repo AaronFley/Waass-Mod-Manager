@@ -796,6 +796,7 @@
   "set.storage_total_one": "Data folder usage · {n} file",
   "set.up_to_date": "You are on the latest version",
   "set.update_link": "Open the release page",
+  "set.update_notes": "What's new",
   "srv.archive_not_found": "File not found: {path}",
   "srv.bad_mode": "mode must be orig or hist",
   "srv.body_too_large": "Request body too large.",

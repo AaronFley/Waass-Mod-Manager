@@ -1858,6 +1858,17 @@ svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width:
 .about-note.is-warn { color: var(--warn); font-weight: 500; }
 .about-note a { color: var(--accent); text-decoration: none; }
 .about-note a:hover { text-decoration: underline; }
+/* 更新说明：纯文本原样展示（保留换行），太长就在框里滚动 */
+.about-note .upd-notes-head {
+  margin: 8px 0 4px; font-size: 11px; color: var(--text-3);
+  text-transform: none; letter-spacing: 0;
+}
+.about-note .upd-notes {
+  max-height: 132px; overflow: auto; padding: 8px 10px;
+  background: var(--panel-2); border-radius: var(--radius);
+  font-size: 11.5px; line-height: 1.65; color: var(--text-2);
+  white-space: pre-wrap; word-break: break-word;
+}
 .set-fixed {
   font-size: 11.5px; color: var(--text-2); line-height: 1.7;
   padding: 8px 11px; margin-top: 4px;

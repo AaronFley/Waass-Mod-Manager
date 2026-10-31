@@ -715,11 +715,12 @@ function renderSelfBar() {
 }
 
 /* 问一次「程序自己有没有新版本」。刻意不 await：
-   启动时先把界面给出来，网络的事过后补。没配更新源就什么都不显示。 */
+   启动时先把界面给出来，网络的事过后补。走缓存（24 小时），
+   所以同一天里反复开程序不会重复联网；拿不到就什么都不显示。 */
 async function checkAppUpdate() {
   if (_qs.get('nosync') === '1') return;
   try {
-    const r = await api('/api/app/check', {});
+    const r = await api('/api/app/check', { force: false });
     if (r && r.newer) {
       S.appUpd = r;
       renderSelfBar();
@@ -1841,7 +1842,8 @@ load().then(() => {
     renderPickBar();
   }
   autoSync();
-  checkAppUpdate();
+  // 启动 10 秒后再问程序有没有新版本：先把界面给出来，别和首屏抢网络。
+  setTimeout(checkAppUpdate, 10000);
 });
 
 /* 启动后悄悄同步一次 Nexus：补封面、查有没有新版本。

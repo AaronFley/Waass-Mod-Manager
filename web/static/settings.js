@@ -297,14 +297,25 @@ async function openSettingsDialog() {
     btn.disabled = true;
     box.textContent = T('set.checking');
     try {
-      const r = await api('/api/app/check', {});
+      // force：这次一定要真去问，不吃 24 小时缓存
+      const r = await api('/api/app/check', { force: true });
       box.className = 'about-note' + (r.newer ? ' is-new' : '');
       // 句子自己用当前语言拼，不用后端那句 message —— 切语言后这里也要跟着变。
-      // 结果只有三种：有新版 / 已是最新 / 没配更新源。
-      box.innerHTML = (r.newer
-        ? T('self.new_version', { ver: esc(r.latest || '') })
-        : (r.ok ? T('set.up_to_date') : T('set.no_feed')))
-        + (r.url && r.newer ? ` · <a href="#" id="aboutGo">${T('set.update_link')}</a>` : '');
+      if (r.newer) {
+        let html = `<span>${T('self.new_version', { ver: esc(r.latest || '') })}</span>`
+          + ` · <a href="#" id="aboutGo">${T('set.update_link')}</a>`;
+        if (r.notes) {
+          // 更新说明是纯文本：只做转义，不当 HTML 解析
+          html += `<div class="upd-notes-head">${T('set.update_notes')}</div>`
+            + `<div class="upd-notes">${esc(r.notes)}</div>`;
+        }
+        box.innerHTML = html;
+      } else if (r.ok) {
+        box.textContent = T('set.up_to_date');
+      } else {
+        // 手动检查失败要如实说，而不是一句「已是最新」
+        box.textContent = r.configured === false ? T('set.no_feed') : esc(r.message || '');
+      }
       const go = $('#aboutGo');
       if (go) go.onclick = (e) => {
         e.preventDefault();

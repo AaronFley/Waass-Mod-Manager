@@ -196,7 +196,9 @@ Stack: Python standard library with plain HTML/CSS/JS — no framework, no build
 
 ### Program updates
 
-The app checks this repository's GitHub releases by default, with no configuration required. **Check for updates** compares version numbers and links to the release page; it never downloads or replaces files on its own.
+The app checks this repository's GitHub releases by default, with no configuration required. A check runs automatically ten seconds after launch; a new version appears in the top bar and opens the release page on click. **Check for updates** in Settings confirms on demand and shows what changed.
+
+Results are cached for 24 hours, so relaunching the same day does not hit the network. The app only compares version numbers and links to the release page; it **never downloads or replaces files on its own**.
 
 To use another source, override it in `data/config.json`:
 
