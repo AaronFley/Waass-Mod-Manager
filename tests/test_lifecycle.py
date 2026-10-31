@@ -25,6 +25,14 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+# 这个文件是唯一不 import core 其它模块的测试（全靠子进程跑），所以要自己
+# 把控制台切 UTF-8：英文版 Windows 的 cp1252 控制台上，下面第一条中文
+# print 就会 UnicodeEncodeError（CI 上抓到的）。
+from core.console import enable_utf8                            # noqa: E402
+
+enable_utf8()
 
 CHILD = r'''
 import os, sys, time, urllib.request

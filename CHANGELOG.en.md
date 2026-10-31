@@ -34,6 +34,14 @@ the exe.
 - **Full scans are serialised**: when the startup scan and a manual "Rescan"
   collide, one scans and the other reuses the result — the same disk isn't read
   twice, and the scan result can't be overwritten mid-flight.
+- **Fixed: starting from source crashed on an English Windows.** The very first
+  GitHub Actions run came back red across the board: `windows-latest` is an English
+  image with the console code page set to cp1252, so the app's Chinese log lines hit
+  `UnicodeEncodeError` on the first `print` and killed the process on its startup
+  path. Invisible on a Chinese-locale machine. Importing `core` now switches the
+  console to UTF-8 (code page first, then the standard streams as utf-8 with
+  `errors="replace"`), so a character that can't be drawn becomes a question mark
+  instead of taking the program down. A cp1252 regression step is pinned in CI.
 - Absolute paths from the author's machine were replaced with neutral wording in
   the public docs.
 - **Update checks work out of the box**: the app asks this repository's GitHub

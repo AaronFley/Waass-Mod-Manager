@@ -39,6 +39,19 @@ jobs:
           echo "共 $(ls tests/test_*.py | wc -l) 套"
           exit $fail
 
+      # 第一次跑 CI 就是这一步全红：windows-latest 是英文镜像，控制台代码页
+      # cp1252，中文一 print 就 UnicodeEncodeError，28 套里 20 多套「失败」。
+      # 本机是中文系统（cp936）看不见。这条固定住，别让它再回来。
+      - name: 英文控制台（cp1252）里的中文输出
+        shell: bash
+        env:
+          PYTHONIOENCODING: cp1252
+        run: |
+          python tests/test_console.py
+          python tests/test_lifecycle.py
+          python run.py --check --check-out build/execheck-cp1252.json
+          test -s build/execheck-cp1252.json
+
       - name: 冷启动（有游戏）
         run: python tools/coldstart.py
 

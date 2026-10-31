@@ -2251,3 +2251,26 @@ Steam 默认把游戏装在 `C:/Program Files (x86)`，普通用户对那里只�
 * **全量扫描串行化**：`State.refresh()` 用 `_scan_lock` 排队，并靠 `_scan_gen`
   去重 —— 排队期间别人已经扫完就直接用结果，同一份磁盘不读两遍，
   `scan_result` 也不会被并发覆盖。
+
+### 33.5 控制台编码也是「换台机器才坏」
+
+第一次真正跑 CI（windows-latest 英文镜像）时，28 套测试里 20 多套同时红，
+报的都是 `UnicodeEncodeError: 'charmap' codec can't encode ...`。不是逻辑错 ——
+Windows 控制台默认用本地代码页，英文系统是 cp1252，编不出中文。
+
+开发机是中文系统（cp936），所以这类错**在本地永远看不到**；而它落在启动
+路径上（`print` 是裸的），英文版 Windows 用户跑源码就会死在第一条日志上。
+
+规矩（`core/console.py`，由 `core/__init__.py` 在导入时自动调用一次）：
+
+* 先把控制台代码页切成 65001（`SetConsoleOutputCP` / `SetConsoleCP`）；
+* 再把 `stdout/stderr/stdin` 重设为 `utf-8` + `errors="replace"` ——
+  老终端仍不支持时最多一个字变问号，**绝不让进程死在一句日志上**；
+* 没有控制台（`--windowed` 的 exe）直接跳过，不碰 `_silence_streams()` 的 devnull。
+
+放在包入口而不是各入口各调一次：`run.py`、`tests/*`、`tools/*` 都过 `core`，
+靠人记着调，迟早漏一个（`test_lifecycle` 就是唯一不 import core 的，已单独补）。
+
+验证：`tests/test_console.py` 用子进程在 cp1252 下跑四组对照（不做处理会崩 /
+调过能打 / 只 import core 就够 / 重复调用无害）；CI 里另有一条固定步骤
+`PYTHONIOENCODING=cp1252` 跑 `test_console`、`test_lifecycle` 和 `run.py --check`。

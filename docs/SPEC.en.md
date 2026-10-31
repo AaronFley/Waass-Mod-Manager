@@ -2714,3 +2714,33 @@ single-instance mutex.
   de-duplicates via `_scan_gen` — if another scan finished while this caller was
   waiting, its result is reused. The disk is not read twice and `scan_result` cannot
   be overwritten mid-flight.
+
+### 33.5 Console encoding is another "only breaks on another machine"
+
+The first real CI run (an English `windows-latest` image) turned 20+ of 28 test
+suites red at once, all with `UnicodeEncodeError: 'charmap' codec can't encode ...`.
+No logic was wrong: Windows consoles default to the local code page, cp1252 on an
+English system, which cannot encode Chinese.
+
+The development machine is a Chinese-locale system (cp936), so this class of error
+is **never visible locally** — and it sits on the startup path (plain `print`), so
+an English-Windows user running from source dies on the first log line.
+
+The rule (`core/console.py`, invoked once by `core/__init__.py` on import):
+
+* switch the console code page to 65001 first (`SetConsoleOutputCP` / `SetConsoleCP`);
+* then reconfigure `stdout/stderr/stdin` as `utf-8` with `errors="replace"` — on a
+  terminal that still can't cope, one character becomes a question mark instead of
+  taking the process down;
+* with no console (a `--windowed` exe) it does nothing and leaves the devnull
+  streams from `_silence_streams()` alone.
+
+It lives in the package entry point rather than being called at each entry point:
+`run.py`, `tests/*` and `tools/*` all go through `core`, and relying on people to
+remember eventually fails (`test_lifecycle` was the one file that imports no core
+module; it now calls it explicitly).
+
+Verified by `tests/test_console.py`, which spawns subprocesses under cp1252 for four
+contrasts (crashes without the fix / prints with it / `import core` alone suffices /
+repeated calls are harmless), plus a pinned CI step running `test_console`,
+`test_lifecycle` and `run.py --check` with `PYTHONIOENCODING=cp1252`.
