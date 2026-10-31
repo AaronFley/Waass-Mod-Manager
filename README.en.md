@@ -43,7 +43,7 @@ Data lives in a `data/` folder next to the exe (copy it along and everything mov
 ### Option 2: run from source
 
 ```
-git clone <repo url>
+git clone https://github.com/AaronFley/Waass-Mod-Manager.git
 cd waass
 python run.py
 ```
@@ -404,16 +404,21 @@ Tech choices: Python standard library + plain HTML/CSS/JS, no framework, no buil
 
 Small package, fast startup, and a one-line change is visible on refresh.
 
-**Self-update check**: by default there is no update feed, and Settings' "Check for updates" will honestly say this is a local development build.
+**Self-update check**: by default it asks this repository's GitHub Releases — **no
+configuration needed**. "Check for updates" in Settings reports whether a newer
+version exists and links to the release page. It only compares version numbers; it
+never downloads or replaces files by itself.
 
-After publishing, add one line to `data/config.json` to enable it; both formats work:
+To point it somewhere else, add one line to `data/config.json` to override the
+default; both formats work:
 
 ```json
-{"update_feed": "https://api.github.com/repos/you/waass/releases/latest"}
+{"update_feed": "https://api.github.com/repos/whoever/whatever/releases/latest"}
 {"update_feed": "https://yourdomain.example/waass/version.json"}
 ```
 
-The latter is a self-made JSON: `{"version": "1.2.5", "url": "download page", "notes": "what changed"}`.
+The latter is a self-made JSON: `{"version": "1.3.0", "url": "download page", "notes": "what changed"}`.
+To turn online checks off entirely, set `{"update_check": false}`.
 
 ---
 

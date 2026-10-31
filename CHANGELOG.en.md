@@ -36,6 +36,14 @@ the exe.
   twice, and the scan result can't be overwritten mid-flight.
 - Absolute paths from the author's machine were replaced with neutral wording in
   the public docs.
+- **Update checks work out of the box**: the app asks this repository's GitHub
+  Releases by default, with nothing to configure in `config.json`. "Check for
+  updates" only compares version numbers and links to the release page — it
+  **never downloads or replaces files** by itself. You can still override the feed
+  or turn checks off entirely (`update_check: false`).
+- README screenshots are real 1.3.0 captures (one set per language), plus GitHub
+  Actions: all tests, both cold starts and the source-mode capability check on
+  Windows.
 
 ## 1.2.9 — 2026-10-30
 

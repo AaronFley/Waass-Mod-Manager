@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import platform
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -25,7 +26,12 @@ from core import i18n
 APP_NAME = "Waass Mod Manager"
 APP_VERSION = "1.3.0"
 APP_DATE = "2026-10-31"
-APP_REPO = ""                     # 发布后填 GitHub 地址
+APP_REPO = "https://github.com/AaronFley/Waass-Mod-Manager"
+
+# 默认更新源。用户没在 config.json 里填 update_feed 时用它，
+# 所以发布版开箱就能查更新，不需要任何配置。
+DEFAULT_FEED = ("https://api.github.com/repos/AaronFley/"
+                "Waass-Mod-Manager/releases/latest")
 LICENSE = "MIT"
 
 
@@ -48,8 +54,13 @@ def info(game_root: Path | None = None, data_dir: Path | None = None,
 
 
 def _feed() -> str:
+    """更新源：用户填的优先；没填就用内置默认；`update_check: false` 表示不查。"""
     from .paths import load_config
-    return str(load_config().get("update_feed") or "").strip()
+    cfg = load_config()
+    if cfg.get("update_check") is False:
+        return ""
+    custom = str(cfg.get("update_feed") or "").strip()
+    return custom or DEFAULT_FEED
 
 
 def check() -> dict:
@@ -69,6 +80,13 @@ def check() -> dict:
     try:
         with urllib.request.urlopen(req, timeout=8) as r:
             raw = r.read(400_000)
+    except urllib.error.HTTPError as e:
+        # GitHub 在没有正式 Release 时 /releases/latest 返回 404 —— 这不是故障
+        if e.code == 404:
+            return {"ok": False, "configured": True, "current": APP_VERSION,
+                    "message": i18n.t("upd.feed_not_found")}
+        return {"ok": False, "configured": True, "current": APP_VERSION,
+                "message": i18n.t("upd.feed_unreachable", err=f"HTTP {e.code}")}
     except Exception as e:                           # noqa: BLE001 网络问题不该崩界面
         return {"ok": False, "configured": True, "current": APP_VERSION,
                 "message": i18n.t("upd.feed_unreachable", err=type(e).__name__)}

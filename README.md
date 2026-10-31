@@ -44,7 +44,7 @@ Release 说明里附了 SHA256，下载后可以核对。
 ### 方式二：跑源码
 
 ```
-git clone <仓库地址>
+git clone https://github.com/AaronFley/Waass-Mod-Manager.git
 cd waass
 python run.py
 ```
@@ -481,16 +481,19 @@ python tools/coldstart.py --no-game   再跑一次「这台机器没装游戏」
 
 打包小、启动快、改一行代码刷新就见效。
 
-**程序自身的更新检查**：默认没有更新源，设置里的「检查程序更新」会如实说这是本地开发版。
+**程序自身的更新检查**：默认查本仓库的 GitHub Release，**不需要任何配置**。
+设置里的「检查程序更新」会告诉你有没有新版本，并给出发布页链接（只比对版本号，
+不会自己下载或替换文件）。
 
-发布后在 `data/config.json` 里加一行即可启用，两种格式都认：
+想指定别的更新源，在 `data/config.json` 里加一行覆盖它，两种格式都认：
 
 ```json
-{"update_feed": "https://api.github.com/repos/你/waass/releases/latest"}
+{"update_feed": "https://api.github.com/repos/谁/哪个仓库/releases/latest"}
 {"update_feed": "https://你的域名/waass/version.json"}
 ```
 
-后者是自制 JSON：`{"version": "1.2.5", "url": "下载页", "notes": "改了什么"}`。
+后者是自制 JSON：`{"version": "1.3.0", "url": "下载页", "notes": "改了什么"}`。
+完全不想联网检查，写 `{"update_check": false}` 就行。
 
 ---
 
