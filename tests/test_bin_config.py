@@ -76,7 +76,10 @@ def main() -> int:
             "WAASS_SANDBOX_DIR": str(base),
         })
 
-        from core import guard, install, safety
+        from core import guard, i18n, install, safety
+        # 断言里写的是中文文案，必须自己钉死语言：程序默认跟随系统，
+        # 英文版 Windows（CI 就是）会挑英文，这里就会假失败。
+        i18n.set_lang("zh")
 
         # ---- 造包 ----
         pkg_cfg = make_pkg(base / "SmartAutoLoot_13035_1.1.7_1698765432.zip", {

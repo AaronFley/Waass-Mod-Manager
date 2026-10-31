@@ -14,6 +14,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+# 这个文件用的是真实下载目录，没有样本包时会先打印一句中文「跳过」。
+# 英文版 Windows 的 cp1252 控制台上那一条 print 就会崩，所以先切 UTF-8。
+from core.console import enable_utf8                             # noqa: E402
+
+enable_utf8()
+
 DL = Path(r"D:\download")
 Z_LOADFIX = DL / "W3LoadFix_13881_1.0.8_2026-10-19T17-54Z_Ukn0RyUyK (1).zip"
 Z_LIGHT = DL / "Light_Rewrite_12144_0.26.2_2026-10-23T03-19Z_864tMl89U.zip"

@@ -22,7 +22,11 @@ os.environ["WAASS_SANDBOX_DIR"] = str(_SANDBOX)
 os.environ["WAASS_DATA_DIR"] = str(_SANDBOX / "appdata")
 os.environ["WAASS_CONFIG_DIR"] = str(_SANDBOX / "cfg")
 
-from core import guard, localize_backup as LB, safety      # noqa: E402
+from core import guard, i18n, localize_backup as LB, safety      # noqa: E402
+
+# 多处断言 backend 返回的中文文案（「已经是原始文件」「漂移」…），
+# 必须自己钉死语言：程序默认跟随系统，英文版 Windows 上会挑英文。
+i18n.set_lang("zh")
 
 PASS = FAIL = 0
 

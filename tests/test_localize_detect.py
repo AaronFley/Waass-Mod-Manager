@@ -33,7 +33,10 @@ os.environ["WAASS_SANDBOX_DIR"] = str(_SANDBOX)
 os.environ["WAASS_DATA_DIR"] = str(_SANDBOX / "appdata")
 os.environ["WAASS_CONFIG_DIR"] = str(_SANDBOX / "cfg")
 
-from core import localize, w3strings          # noqa: E402
+from core import i18n, localize, w3strings          # noqa: E402
+
+# 断言里有中文文案（why / 说明），自己钉死语言，别让系统语言决定（CI 是英文机）
+i18n.set_lang("zh")
 
 PASS = FAIL = 0
 

@@ -19,6 +19,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+# 没有样本包时会先打印一句中文「跳过」；英文版 Windows 的 cp1252 控制台上
+# 那一条 print 就会崩（CI 抓到过），所以先切 UTF-8。
+from core.console import enable_utf8                             # noqa: E402
+
+enable_utf8()
+
 DL = Path(r"D:\download")
 Z_DEBUG = DL / "Debug Console (Next-Gen)-7172-1-0-1671042002.zip"
 
@@ -87,7 +93,8 @@ def main() -> int:
             "WAASS_SANDBOX_DIR": str(base),
         })
 
-        from core import config_patches, install, registry
+        from core import config_patches, i18n, install, registry
+        i18n.set_lang("zh")          # 断言是中文文案，别让系统语言决定（CI 是英文机）
 
         general = game / "bin" / "config" / "base" / "general.ini"
 

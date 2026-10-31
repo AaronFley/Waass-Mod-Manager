@@ -42,8 +42,10 @@ def main() -> int:
         "WAASS_EXTRA_ARCHIVE_DIRS": "",
     })
 
-    from core import appinfo, track
+    from core import appinfo, i18n, track
     from core.models import ModRecord
+
+    i18n.set_lang("zh")          # 断言是中文文案，别让系统语言决定（CI 是英文机）
 
     print("\n[1] 从各种写法里认 Nexus ID")
     cases = {
