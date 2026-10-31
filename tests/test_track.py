@@ -252,10 +252,15 @@ def main() -> int:
     ab = appinfo.info(game, data, {"mods": 3})
     check("有版本号", bool(ab["version"]), str(ab))
     check("许可证是 MIT", ab["license"] == "MIT")
+    check("仓库地址已填", ab["repo"].startswith("https://github.com/"), ab["repo"])
+    # 1.3.0 起内置了默认更新源，所以「没配」这条只剩关掉检查的情况。
+    # 别在这里断言联网结果 —— CI 可能没有外网。
+    (data / "config.json").write_text(
+        json.dumps({"update_check": False}), encoding="utf-8")
     chk = appinfo.check()
-    check("没配更新源时如实说", chk["ok"] is False and chk["configured"] is False,
+    check("关掉检查时如实说没源", chk["ok"] is False and chk["configured"] is False,
           str(chk))
-    check("提示里说清楚是本地开发版", "开发版" in chk["message"], chk["message"])
+    check("提示里说明检查已关闭", "关闭" in chk["message"], chk["message"])
 
     # 本地放一个 JSON 更新源，验证真能比对
     feed = base / "version.json"

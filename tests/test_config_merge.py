@@ -14,6 +14,12 @@ sys.path.insert(0, str(ROOT))
 
 from core.config_merge import Change, apply, diff, parse, revert, summarize  # noqa: E402
 
+# 这里断言的是中文摘要。不钉语言，跑过截图脚本（config.json 的 lang 被改成 en）
+# 之后再跑测试就会假失败 —— 踩过一次。
+from core import i18n  # noqa: E402
+
+i18n.set_lang("zh")
+
 fails: list[str] = []
 
 
