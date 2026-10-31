@@ -173,25 +173,30 @@ watchdog 每 1 秒看一眼，超过 6 秒没有新页面（`GET /` 会清掉这
 
 ## 9. Nexus 资料自动获取（1.0.2）
 
-### 9.1 官方 API 不用，但也不能什么都不做
+### 9.1 资料来自站点的内部查询接口
 
-官方 API（`api.nexusmods.com`）要 Personal Key，实测无 Key 直接 `401`。用户明确不想填 Key。
-但"新装一个 mod 却不知道它是谁"是真问题 —— 没有 ID 就没有作者、封面、版本对比。
+`POST https://api-router.nexusmods.com/graphql`。
 
-实测三条路的结论（2026-10-25）：
+**这是什么**：站点网页前端自己用的查询接口 —— 只读，只返回公开数据，不需要登录，
+也不需要 Key。
 
-| 路径 | 结果 |
-|---|---|
-| `www.nexusmods.com/witcher3/mods/<id>` HTML | **403**，Cloudflare `Just a moment...` |
-| 同上，用 Edge `--headless=new` 加载 | 还是 challenge 页 |
-| `api.nexusmods.com/v1/...` | 401，要 Key |
-| `staticdelivery.nexusmods.com`（图片 CDN） | 可直连（404/200，不是 403） |
-| **`POST api-router.nexusmods.com/graphql`** | **200，不需要登录、不需要 Key** |
+**风险**：它不在公开文档里，是站点的内部接口。随时可能被改动、加限流或直接下线，
+没有任何版本兼容承诺。
 
-最后那个是 Nexus 新版网页前端自己在用的接口。它的 query 里有 `legacyMods(ids:[{gameId,modId}])`
-和 `mods(filter:...)`，返回 `Mod` 类型：`name / author / version / summary / category /
-pictureUrl / thumbnailUrl / downloads / endorsements / updatedAt / adultContent`。
-witcher3 的 `gameId` 固定 **952**。
+**一旦失效**：不回退到任何其他非公开接口，也不抓网页兜底。没有备用端点，失效就是失效：
+界面显示「未记录」，不阻塞安装、扫描、卸载 —— 资料缺失只影响展示。
+
+**请求怎么标识自己**：`User-Agent: WaassModManager/<版本>`，并带 `Application-Name` /
+`Application-Version`。如实标识，不伪装成浏览器。
+
+接口的形状（写代码时照这个，别猜）：
+
+- query 里有 `legacyMods(ids:[{gameId,modId}])` 和 `mods(filter:...)`，
+  返回 `Mod` 类型：`name / author / version / summary / category / pictureUrl /
+  thumbnailUrl / downloads / endorsements / updatedAt / adultContent`；
+- witcher3 的 `gameId` 固定 **952**。
+
+> 同一段口径也写在 `core/nexus_meta.py` 的模块说明顶部。改其中一处就要改另一处。
 
 ### 9.2 文件名解析：两种格式都要认
 
@@ -1105,7 +1110,7 @@ CAT_DEFAULT = (CAT_MENU,)
 | 级别 | 引擎 | 配置 | 说明 |
 |---|---|---|---|
 | L0 | 翻译记忆 + 术语表 | 不要 | 命中即出，重复串与术语从此一致 |
-| L1 | Google gtx / MyMemory | 不要 | 免 Key，实测两条都通 |
+| L1 | Index-Translate（B站）/ MyMemory | 不要 | 两个免 Key 的公共服务，前者默认排在前面 |
 | L2 | 百度 / 其他需 Key 的 | 要填 Key | 一行一个，轮换使用 |
 
 `core/translate.py` 只用标准库 `urllib`，不引第三方依赖。
@@ -1113,6 +1118,35 @@ CAT_DEFAULT = (CAT_MENU,)
 
 **多个 Key 轮换**是用户明确要求的（「多配置几个 key 防止某些接口出问题时汉化失败」）：
 `eng.used` 记每个 Key 用了多少次，每次取最少用的那个。
+
+### 1.3.2：Index-Translate（B站）与「首次同意」
+
+**端点**：`POST https://index-translate.bilibili.com/v1/chat/completions`（OpenAI 兼容）。
+
+- 模型名固定 `Index-Translate-9B`。写错名字服务端回 400；同一服务还有
+  `2B` / `35B-A3B` / `Index-Nailong-9B`，本程序只用 9B。
+- **匿名请求**：不发 `Authorization` 头，也不带 `Origin`。带上鉴权头会回 412，
+  这条是实测踩出来的，别为了「更规范」顺手加。
+- 实测 321 ms 一次。返回是 chat 补全，取 `choices[0].message.content` 后必须清洗：
+  去掉首尾引号、「译文：」类前缀，多行只取第一行有内容的那行；清洗后为空或仍是
+  英文原样，判 `EngineError` 交给下一个引擎。
+- **状态是 preview**：公开免费，但没有任何配额、SLA 或结束时间的承诺，可能限流
+  （429）。失败只是让位 —— 现有的超时与「连续失败 3 次跳过」正好兜住这种情况。
+- 默认开启，排在 `order` 第一位。老配置里没有它的，读取时追加到末尾：
+  尊重用户已有的顺序，不重排。
+
+**首次同意是一道服务端闸门，不是前端藏起来的一个按钮。**
+
+- 开关是 `data/translate/config.json` 里的 `consent`，默认 `false`。
+- `POST /api/localize/run` 看到未同意，只回 `{need_consent: true, engines: [...]}`：
+  不建任务、不起线程、不发任何请求。前端藏按钮拦不住直接调接口。
+- 同意一次就记住。`POST /api/localize/consent` 只写这一个开关。
+- 清单由引擎链生成（`translate.targets()`），不是硬编码：关掉的引擎、没填 Key 的
+  引擎不会出现在清单里，本来也收不到任何东西。加引擎不需要改文案。
+
+**同一版移除了另一个免 Key 通道**：`translate.googleapis.com` 的 gtx 接口。它不在
+公开文档内、没有配额承诺、随时可能被关，却要把用户的菜单文字发出去。「能翻」抵不上
+「没有说明就把文字外发」和「哪天突然全挂」这两件事。要加回它，先解决这两条。
 
 ### 译文质量：三件工程活
 
@@ -2299,3 +2333,28 @@ Windows 控制台默认用本地代码页，英文系统是 cp1252，编不出�
 * 测试 `tests/test_appinfo.py` 用一个本地 HTTP 服务验证：首次联网、24 小时内不重复、
   手动不吃缓存、过期后带 `If-None-Match`、服务器回 304 时结论不变、线上更旧不提示、
   断网的两种口径、关掉检查后完全不联网。
+
+## 35. 1.3.2：出网行为清单（2026-10-31）
+
+程序只有三个出网点。这张表是唯一口径，改动任何一条都要同步这里。
+
+| 出网点 | 触发 | 默认 | 发什么 | 失败表现 | 怎么关 |
+|---|---|---|---|---|---|
+| Nexus 元数据 | 装新包 / 启动后补齐 / 手动刷新 | 开 | modId 列表（只读查询） | 静默，界面显示「未记录」 | 设置里关，或断网 |
+| 程序更新检查 | 启动 10 秒后、手动点检查 | 开 | 无（只读 GitHub Releases 的版本号） | 自动检查静默；手动检查报错说原因 | `update_check: false`（目前只有配置项，没有界面开关） |
+| 汉化翻译 | 用户主动发起汉化 | 需先同意一次 | 待翻译的菜单文字 | 单条失败换下一个引擎，全挂则报告 | 关掉所有引擎，或不同意 |
+
+三条之外没有别的：没有遥测、没有账号体系、不收集使用数据、不上报崩溃日志。
+这不是承诺，是现状 —— 代码里确实没有。
+
+两个细节：
+
+- **对外请求都如实标识自己**。翻译带 `Waass/<APP_VERSION>`，元数据带
+  `WaassModManager/<APP_VERSION>` 与 `Application-Name` / `Application-Version`；
+  版本号只从 `core/appinfo.py` 取，不在别处再写一遍。1.3.2 之前翻译那边写死了
+  `Waass/1.2`，元数据那边伪装成浏览器，两处都已改掉。
+- **「关掉」是整条链路关掉**，不是只关界面上的提示：关掉之后不再产生任何请求，
+  对应功能退化成纯本地，其余功能照常。断网时三条一起缺席，其它一切照旧。
+
+第 9 节（元数据）、第 21 节（翻译）与本节要保持一致。对外那份是
+`docs/network-access.md`：读者不同，口径相同。

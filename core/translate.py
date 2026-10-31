@@ -2,10 +2,18 @@
 
 为什么不是「调一个接口就完事」
 ------------------------------
-2026-10-28 把能想到的免 Key 端点全测了一遍，只有两个活着
-（MyMemory、Google gtx；LibreTranslate 的公共镜像全是 502/403/301，
-微软的 edge 免 Key 通道已经 404）。只绑一个，它一挂整条链路就废，
-用户看到的又是「汉化失败」。
+2026-10-28 把能想到的免 Key 端点全测了一遍，活着的只有 MyMemory 和
+Google gtx（LibreTranslate 的公共镜像全是 502/403/301，微软的 edge
+免 Key 通道已经 404）。只绑一个，它一挂整条链路就废，用户看到的又是
+「汉化失败」。
+
+2026-10-31 把 Google 那个免 Key 的内部翻译端点摘了：它没有公开文档、
+没有配额承诺、随时可能被关，却要把用户的菜单文字发出去。
+「能翻」抵不上「没经过用户同意就外发」和「哪天突然全挂」这两件事。
+
+同一天接入 B站 Index-Translate（有公开的 OpenAI 兼容接口、匿名可用），
+默认排在 MyMemory 前面：模型出的语序比通用记忆库顺，短菜单句尤其明显。
+百度留作用户自配。
 
 更要紧的是：**HTTP 200 不等于翻译成功**。实测三种典型失败：
 
@@ -22,6 +30,7 @@
 --------
 - 只用标准库（urllib），跟 nexus.py 一样，打包体积和依赖都不增加；
 - 不发任何游戏内数据，只发待翻的那几句菜单文字；
+- 发之前要用户点头（`consent`），同意一次就记住，见 server 的 /api/localize/consent；
 - 记忆库和术语表都在 data/translate/ 下，纯本地文件，用户可删可改。
 """
 from __future__ import annotations
@@ -35,6 +44,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+from .appinfo import APP_VERSION      # appinfo 只依赖 i18n / paths，不会反向引本模块
 from .paths import DATA_DIR
 
 DIR = DATA_DIR / "translate"
@@ -113,12 +123,15 @@ DEFAULT_GLOSSARY = {
 
 DEFAULT_CONFIG = {
     # 顺序 = 尝试顺序。启动时探测一次，不通的自动往后排。
-    "order": ["google", "mymemory"],
+    "order": ["indextranslate", "mymemory"],
     "engines": {
-        "google": {"on": True, "keys": []},
+        "indextranslate": {"on": True},
         "mymemory": {"on": True, "keys": [], "email": ""},
         "baidu": {"on": False, "appid": "", "keys": []},
     },
+    # 用户有没有同意过「把待翻的界面文字发到上面这些服务」。
+    # 必须在 server 侧拦，不能只靠前端藏按钮 —— 接口是可以直接调的。
+    "consent": False,
 }
 
 
@@ -138,17 +151,39 @@ def _write_json(p: Path, data: dict) -> None:
     tmp.replace(p)
 
 
+def _merge_order(order: list[str]) -> list[str]:
+    """把默认链里、用户 order 还没有的引擎追加到末尾。
+
+    升级前的老配置 `order` 只有 `["mymemory"]`，光靠「过滤下线引擎」永远补不进
+    新引擎 —— 用户在设置里看不到它，链路里也轮不到它，等于没接。
+    已存在的顺序一律不动（用户自己排过序就按他的来），只往后追加；
+    这次追加只作用于本次读取，不强制写盘，用户下次保存时才落进文件。
+    """
+    out = list(order)
+    for eid in DEFAULT_CONFIG["order"]:
+        if eid in ENGINES and eid not in out:
+            out.append(eid)
+    return out
+
+
 def config() -> dict:
     d = _read_json(CONF_FILE, DEFAULT_CONFIG)
     out = {k: (dict(v) if isinstance(v, dict) else v) for k, v in DEFAULT_CONFIG.items()}
     for k, v in d.items():
         if k == "engines" and isinstance(v, dict):
             for eid, ecfg in v.items():
+                if eid not in ENGINES:
+                    # 老配置里可能留着已经下线的引擎（1.3.1 之前的 google）。
+                    # 这里直接丢掉：读进来一次，下次保存就不会再写回去。
+                    continue
                 base = dict(out["engines"].get(eid) or {"on": False, "keys": []})
                 base.update(ecfg)
                 out["engines"][eid] = base
+        elif k == "order" and isinstance(v, list):
+            out["order"] = [str(x) for x in v if str(x) in ENGINES]
         else:
             out[k] = v
+    out["order"] = _merge_order(out["order"])
     return out
 
 
@@ -157,12 +192,18 @@ def save_config(patch: dict) -> dict:
     for k, v in (patch or {}).items():
         if k == "engines" and isinstance(v, dict):
             for eid, ecfg in v.items():
+                if eid not in ENGINES:
+                    continue
                 base = dict(cur["engines"].get(eid) or {"on": False, "keys": []})
                 if isinstance(ecfg, dict):
                     base.update(ecfg)
                     cur["engines"][eid] = base
-        elif k in ("order",) and isinstance(v, list):
-            cur["order"] = [str(x) for x in v]
+        elif k == "order" and isinstance(v, list):
+            # 保存时同样补齐：否则每个用户手动保存一次，刚补进来的引擎又丢了。
+            # 想停用它请关 `on`，而不是从 order 里删 —— 删了下次读还会补回来。
+            cur["order"] = _merge_order([str(x) for x in v if str(x) in ENGINES])
+        elif k == "consent":
+            cur["consent"] = bool(v)
     _write_json(CONF_FILE, cur)
     return cur
 
@@ -512,6 +553,9 @@ class Engine:
     id = ""
     label = ""
     needs_key = False
+    # 实际会连的域名。首次同意那张说明要把它原样给用户看，
+    # 所以写在这里，而不是让界面自己猜。
+    target = ""
 
     def __init__(self, cfg: dict | None = None):
         self.cfg = cfg or {}
@@ -525,11 +569,8 @@ class Engine:
         raise NotImplementedError
 
     # 子类用同一个 urllib 封装，统一超时与错误
-    def _get(self, url: str):
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "Waass/1.2",
-            "Accept": "application/json,text/plain,*/*",
-        })
+    def _send(self, req):
+        """GET / POST 共用：一个超时、一套错误文案，别让两种请求各说各话。"""
         try:
             with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
                 return json.loads(r.read().decode("utf-8", "replace"))
@@ -542,29 +583,38 @@ class Engine:
         except json.JSONDecodeError:
             raise EngineError("返回的不是 JSON") from None
 
-
-class GoogleEngine(Engine):
-    id = "google"
-    label = "Google 翻译"
-
-    def translate(self, text: str, key: str | None = None) -> str:
-        url = "https://translate.googleapis.com/translate_a/single?" + urllib.parse.urlencode({
-            "client": "gtx", "sl": "en", "tl": "zh-CN", "dt": "t", "q": text,
+    def _get(self, url: str):
+        req = urllib.request.Request(url, headers={
+            # 版本号从 appinfo 取，别写死 —— 之前写死成 1.2，服务方看到的一直是旧版本
+            "User-Agent": f"Waass/{APP_VERSION}",
+            "Accept": "application/json,text/plain,*/*",
         })
-        d = self._get(url)
-        try:
-            parts = [seg[0] for seg in d[0] if seg and seg[0]]
-        except (IndexError, TypeError):
-            raise EngineError("返回结构看不懂") from None
-        out = "".join(parts).strip()
-        if not out:
-            raise EngineError("返回了空译文")
-        return out
+        return self._send(req)
+
+    def _post(self, url: str, payload: dict):
+        """JSON POST。
+
+        刻意**不带** Authorization：见过一个端点（Index-Translate）只要收到鉴权头，
+        哪怕是占位符，也直接 412 拒掉。匿名能用的接口就老老实实匿名，
+        也不要伪装成浏览器的 UA —— 服务方该看到的版本信息如实给。
+        """
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={
+                "User-Agent": f"Waass/{APP_VERSION}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            method="POST",
+        )
+        return self._send(req)
 
 
 class MyMemoryEngine(Engine):
     id = "mymemory"
     label = "MyMemory"
+    target = "mymemory.translated.net"
 
     def ready(self) -> tuple[bool, str]:
         return True, ""      # 免 Key；填邮箱只是提额度
@@ -588,11 +638,102 @@ class MyMemoryEngine(Engine):
         return out
 
 
+_IT_URL = "https://index-translate.bilibili.com/v1/chat/completions"
+# 模型名必须写全。实测传 "index-translate" 直接 400「未知模型」。
+# 同一端点还挂着 2B / 35B-A3B / Index-Nailong-9B，菜单短句用 9B 就够，
+# 换别的只是多一种变量，没有收益。
+_IT_MODEL = "Index-Translate-9B"
+
+# LLM 不是翻译 API，它需要一个「只给译文」的指令；占位符要单独交代，
+# 否则它会把 [0] {0} 当成正文改写掉，标签结构直接崩。
+_IT_PROMPT = (
+    "把下面这条游戏菜单文字翻译成简体中文。\n"
+    "只输出译文本身：不要解释、不要加引号、不要附上原文。\n"
+    "原文里的 [0]、{0} 是占位符，必须原样保留，位置按中文语序安排。\n"
+    "原文："
+)
+
+# 模型「多说一句」的几种开场白。中英文都认 —— 它有时整段答英文。
+_PREFIX = re.compile(
+    r"^\s*(?:译文|翻译|中文译文|简体中文|中文|译名|翻译结果|输出|"
+    r"translation|translated text|chinese|output)\s*[:：]\s*", re.I)
+# 中英文引号、直角引号、书名号：它包哪一层都见过
+_QUOTES = "\"'“”‘’「」『』《》"
+
+
+def _tidy_reply(reply: str, src: str = "") -> str:
+    """把模型的回复收成一行纯译文；收不出可用的就抛 EngineError。
+
+    实测同一句原文，它这样回过三种（都是 HTTP 200、finish_reason: stop）：
+
+        "译文： 自动装备时强制不播放动画"        ← 引号 + 前缀
+        译文：\\n自动装备时强制不播放动画          ← 前缀自己占一行
+        自动装备时强制不播放动画\\n\\n说明：……     ← 正文后面跟一段解释
+
+    规则：去首尾引号 → 去掉「译文：」类前缀 → 多行取第一行有内容的。
+    取第一行而不是拼起来，是因为第二行起基本都是解释，拼进来会把译文撑长，
+    等长写入时必然超预算。代价是模型真把一句译文断成两行时只剩前半句 ——
+    菜单文字本来就该是一行，这个取舍划算。
+
+    清洗后为空、或者清洗后还是原文（见 `looks_untranslated`），都算这次没翻成：
+    空串和英文原样写进语言表，用户看到的就是「翻了但没翻」，不如换下一个引擎。
+    """
+    out = ""
+    for line in str(reply or "").splitlines():
+        t = line.strip().strip(_QUOTES).strip()
+        t = _PREFIX.sub("", t).strip().strip(_QUOTES).strip()
+        if t:
+            out = t
+            break
+    if not out:
+        raise EngineError("返回了空译文")
+    if src and looks_untranslated(src, out):
+        raise EngineError("把原文原样退回了（等于没翻）")
+    return out
+
+
+class IndexTranslateEngine(Engine):
+    """B站 Index-Translate：OpenAI 兼容的 chat/completions，匿名、免 Key。
+
+    实测踩出来的三个坑（都已处理，改之前先读一遍）：
+
+    1. 模型名 —— 必须 `Index-Translate-9B`，只写 `index-translate` → 400「未知模型」；
+    2. 鉴权头 —— 带任何 `Authorization`（哪怕占位符）→ 412「request was banned」，
+       所以 `_post()` 里根本不设这个头，匿名请求；
+    3. 返回形态 —— 它是 LLM，会把「译文：」或一句解释一起吐出来，必须清洗，
+       见 `_tidy_reply`。
+
+    端点没有配额承诺，也没有文档承诺长期存在，所以只是链上的第一站不是唯一一站：
+    它挂了，`_ask()` 会自动落到 MyMemory。
+    """
+    id = "indextranslate"
+    label = "Index-Translate（B站）"
+    needs_key = False
+    target = "index-translate.bilibili.com"
+
+    def ready(self) -> tuple[bool, str]:
+        return True, ""      # 匿名可用，不需要用户填任何东西
+
+    def translate(self, text: str, key: str | None = None) -> str:
+        d = self._post(_IT_URL, {
+            "model": _IT_MODEL,
+            "messages": [{"role": "user", "content": _IT_PROMPT + text}],
+            # 不关思考会先吐一段推理过程：既慢，又会混进要清洗的正文里
+            "chat_template_kwargs": {"enable_thinking": False},
+        })
+        try:
+            raw = d["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError):
+            raise EngineError("返回结构看不懂") from None
+        return _tidy_reply(str(raw), text)
+
+
 class BaiduEngine(Engine):
     """百度翻译开放平台。国内最稳，免费额度够翻几万条；要用户自己申请 appid 和密钥。"""
     id = "baidu"
     label = "百度翻译"
     needs_key = True
+    target = "fanyi-api.baidu.com"
 
     def ready(self) -> tuple[bool, str]:
         if not str(self.cfg.get("appid") or "").strip():
@@ -624,7 +765,7 @@ class BaiduEngine(Engine):
 
 
 ENGINES: dict[str, type[Engine]] = {
-    "google": GoogleEngine,
+    "indextranslate": IndexTranslateEngine,
     "mymemory": MyMemoryEngine,
     "baidu": BaiduEngine,
 }
@@ -645,6 +786,16 @@ def build_chain(cfg: dict | None = None) -> list[Engine]:
         if ok:
             out.append(eng)
     return out
+
+
+def targets(cfg: dict | None = None) -> list[dict]:
+    """这次真会发请求的那几个服务，给「首次同意」那张说明用。
+
+    列的是 build_chain() 的结果，不是整张注册表 —— 没开、没配 Key 的引擎
+    不会收到任何东西，写进说明里只会让人以为发得比实际多。
+    """
+    return [{"id": e.id, "label": e.label, "target": e.target}
+            for e in build_chain(cfg)]
 
 
 def probe(cfg: dict | None = None, text: str = "Auto equip force no animation") -> list[dict]:

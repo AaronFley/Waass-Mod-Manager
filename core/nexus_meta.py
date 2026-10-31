@@ -1,14 +1,26 @@
 """从 Nexus 官网取 mod 资料：作者、封面、最新版本、简介、下载量。
 
-为什么不走官方 API
-------------------
-官方 API 要 Personal Key，免费账号体验差，Key 还会过期。这里用的是 Nexus
-**新版网页前端自己在用的** 公开查询接口：
-
+数据来源
+--------
     POST https://api-router.nexusmods.com/graphql
 
-它只读、只返回公开数据、不需要登录、不需要 Key。官网的 HTML 页面有 Cloudflare
-人机校验（程序访问一律 403 "Just a moment..."），但这个接口没有，所以用它。
+这是 Nexus Mods 网页前端自己使用的查询接口：只读，只返回公开数据，不需要
+登录，也不需要 Key。它不在公开文档里，是站点的内部接口。
+
+已知的技术债与风险
+------------------
+* 该端点随时可能被改动、加限流或直接下线，且没有任何版本兼容承诺。
+* 一旦它失效，本模块**不会**回退到任何其他非公开接口：没有备用端点，也不
+  抓网页兜底。失效就是失效，如实呈现。
+* 请求如实标识本程序（`User-Agent: WaassModManager/<版本>`，并附带
+  `Application-Name` / `Application-Version`），不伪装成浏览器。
+
+降级顺序
+--------
+1. 请求失败（断网、接口变更、被限流）一律静默返回空，界面显示「未记录」。
+2. 不阻塞扫描、安装、卸载 —— 资料缺失只影响展示，不影响任何操作。
+3. 需要恢复资料时，由用户在设置里手动刷新；若端点已下线，刷新同样只会
+   得到「未记录」。
 
 边界（这几条是硬规则）
 ----------------------
@@ -16,8 +28,6 @@
 * **不在扫描时联网**。请求只发生在三个时刻：装新包时（可在设置里关）、
   启动后补齐缺失资料（每次启动最多一轮）、你手动点「刷新」时。不做轮询。
 * 缓存 7 天（`data/nexus/<id>.json`），没过期就不重复请求。
-* 任何失败都静默返回空 —— 断网、接口变了、被限流，界面照常用，只是显示
-  「未记录」，绝不阻塞安装和扫描。
 """
 from __future__ import annotations
 
@@ -31,6 +41,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import i18n
+# 顶层导入 appinfo 不成环：appinfo 在模块级只依赖 i18n 与 paths，两者都不引用本模块；
+# 它对 track 的引用在函数体内，而 track 反过来也是在函数体内才引用 nexus_meta。
+from .appinfo import APP_NAME, APP_VERSION
 from .paths import DATA_DIR
 
 GAME_ID = 952                     # Nexus 上 The Witcher 3 的固定编号
@@ -45,8 +58,8 @@ TTL_DAYS = 7                      # 资料多久算旧
 MIN_GAP = 0.8                     # 两次请求之间至少隔这么久，别把人网站当靶子
 COOL_DOWN = 300                   # 失败后 5 分钟内不再试，避免反复撞墙
 MAX_IDS = 60                      # 一次批量最多问这么多个
-UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-      "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 Edg/141.0.0.0")
+# 如实标识，不冒充浏览器；版本号只从 appinfo 取，不在这里再写一遍
+UA = f"WaassModManager/{APP_VERSION}"
 
 _lock = threading.Lock()
 _state = {"last": 0.0, "fail_until": 0.0, "ok_at": 0.0, "last_error": ""}
@@ -82,7 +95,9 @@ def _gql(query: str, timeout: float = 12.0) -> dict:
     req = urllib.request.Request(
         GQL, data=body, method="POST",
         headers={"Content-Type": "application/json", "User-Agent": UA,
-                 "Accept": "application/json"})
+                 "Accept": "application/json",
+                 "Application-Name": APP_NAME,      # "Waass Mod Manager"
+                 "Application-Version": APP_VERSION})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             raw = r.read().decode("utf-8", "replace")

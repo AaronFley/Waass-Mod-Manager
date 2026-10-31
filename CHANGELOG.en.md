@@ -5,6 +5,20 @@ Chinese version: [CHANGELOG.md](CHANGELOG.md).
 
 The version number is maintained in one place, `core/appinfo.py`.
 
+## 1.3.2 — 2026-10-31
+
+**A second translation engine, and the network story written down**
+
+### Added
+
+- Localization gains an **Index-Translate (Bilibili)** engine, closer to the original wording, on by default and tried first
+- Before the first localization run, the app lists which text goes to which service; confirm once and it is not asked again
+
+### Improved
+
+- Removed a translation channel that had no public documentation, leaving only services that can be explained
+- Outbound requests now carry the program's real name and version number
+
 ## 1.3.1 — 2026-10-31
 
 **Program update checks are now a standing feature: checked at launch, cached for a day.**

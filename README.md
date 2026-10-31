@@ -1,6 +1,6 @@
 # Waass Mod Manager
 
-**English** · [简体中文](#简体中文)
+**[English](#english)** · [简体中文](#简体中文)
 
 ## English
 
@@ -39,7 +39,7 @@ Three principles apply throughout:
 - Identifies each mod's Nexus ID and fills in author, cover image, summary, and latest version
 - Side-by-side version comparison: local versus the Nexus main file
 - When identification is uncertain, candidates are listed for you to confirm — a wrong binding breaks version checks for good, so nothing is bound automatically
-- No API key and no login; only public information is read
+- No account and no key: author, cover, and version come from a read-only public query endpoint, and nothing but the mod IDs is sent
 
 **Localization**
 
@@ -113,6 +113,16 @@ A full guide is built in: **Settings → Guide**.
 
 ![Guide](docs/screenshots/1.3.0/04-guide-en.png)
 
+### Does it connect to the internet?
+
+Yes, in three places. Each does one job, and none of them needs an account.
+
+- **Nexus metadata.** On by default. Runs when you install a mod, once after launch, and when you click refresh by hand. It sends the mod IDs and reads back public information: author, cover, latest version. If the query endpoint is unavailable, entries show *unrecorded* and nothing else is affected. Turn it off in **Settings → Nexus metadata**.
+- **Update check.** On by default. Runs ten seconds after launch and when you click **Check for updates**. It sends nothing: it only reads the version number of the latest release and offers a link to that page. A failed automatic check stays silent; a failed manual check tells you why. To turn it off, set `"update_check": false` in `data/config.json`.
+- **Localization.** Asks once, first. Nothing is sent until you agree. Runs only when you start a translation, and sends the text you selected. The first run lists exactly which service will receive it — decline, and no request is made. To turn it off, switch every engine off in the localization panel.
+
+There is no telemetry, no account, and no usage data collected. The program never downloads or replaces files on its own, and it works fully offline: only the three items above go quiet.
+
 ### Upgrading and your data
 
 To upgrade, replace the executable. `data/` needs no attention: mod list, groups, Nexus records, install history, localization originals, and save backups all carry over.
@@ -165,7 +175,7 @@ Copy the executable and the `data/` folder beside it. The mod list and load orde
 Everything is in `data/`: configuration, Nexus records, groups, install history, snapshots, quarantine, and localization originals. Builds contain no user data.
 
 **Does it connect to the internet?**
-Only to fetch Nexus metadata and to check for program updates, both against public endpoints. No login, nothing uploaded, and both can be disabled in Settings.
+Yes, in three places: Nexus metadata, update checks, and localization. All three can be turned off — see *Does it connect to the internet?* above for what each one sends.
 
 ### Disk usage
 
@@ -262,7 +272,7 @@ Waass 把它们摊开来给你看：哪些模组在生效、谁排在谁前面�
 - 自动识别模组对应的 Nexus ID，补齐作者、封面、简介与最新版本
 - 版本双栏对照：本地版本与 Nexus 主文件版本，可比较时直接给出结论
 - 认不准时列出候选由你确认，绑定错误会让更新检查长期失效，因此不做自动绑定
-- 无需 API Key、无需登录，只读取公开信息
+- 不需要账号也不需要 Key：作者、封面、版本来自一个只读的公开查询接口，除模组编号外不发送任何内容
 
 **汉化**
 
@@ -336,6 +346,16 @@ python run.py --port 8765  指定端口
 
 ![使用说明](docs/screenshots/1.3.0/03-guide-zh.png)
 
+### 它会联网吗
+
+会，三个地方。每处只做一件事，都不需要账号。
+
+- **Nexus 资料。** 默认开启。装新模组时、每次启动后补一次、以及你手动点刷新时。发出去的是模组编号，读回来的是作者、封面、最新版本这些公开信息。查询接口不通时条目显示「未记录」，其他功能照常。可在**设置 → Nexus 资料**中关闭。
+- **程序更新检查。** 默认开启。启动十秒后自动一次，以及你点「检查程序更新」时。不发送任何内容，只读最新发布页的版本号，有新版本时给出该页面链接。自动检查失败不出声，手动检查会说明原因。关闭方式是在 `data/config.json` 写 `"update_check": false`。
+- **汉化翻译。** 先问一次，同意之前不发送。只在你主动发起汉化时运行，发出去的是你选中要翻译的那些文字。第一次使用前会列出会收到这些文字的服务；不同意就不会发出任何请求。关闭方式是在汉化面板的「翻译方式」里关掉所有引擎。
+
+没有遥测，没有账号，不收集使用数据。程序不会自行下载或替换任何文件，断网也能完整使用 —— 只有上面三件事停下来。
+
 ### 升级与数据
 
 升级方式是把新版本 exe 覆盖旧文件，`data/` 不需要任何处理：模组列表、分组、Nexus 记录、安装档案、汉化原件与存档备份都会继续沿用。
@@ -388,7 +408,7 @@ python run.py --port 8765  指定端口
 全部在 `data/` 中，包括配置、Nexus 记录、分组、安装档案、快照、隔离区与汉化原件。打包产物不包含任何用户数据。
 
 **程序会联网吗？**
-仅在补齐 Nexus 资料与检查程序更新时访问公开接口，不登录、不上传任何内容。两项功能均可在设置中关闭。
+会，三处：Nexus 资料、更新检查、汉化翻译。三处都可以关闭，各自会发什么见上文「它会联网吗」。
 
 ### 数据占用
 

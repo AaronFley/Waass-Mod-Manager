@@ -7,6 +7,8 @@
    数据来自：
      GET  /api/localize/panel   模组清单 + 类别 + 引擎状态 + 历次记录
      POST /api/localize/run     {mods:[key], cats:[id]} → 任务快照
+                                首次会回 {need_consent:true, engines:[...]}
+     POST /api/localize/consent 记下「同意把文字发出去」，然后重发 run
      GET  /api/localize/job?id= 进度
      POST /api/localize/write   {id, edits, only}
      POST /api/localize/restore {record, mode, force}
@@ -217,17 +219,69 @@ async function startRun() {
   if (!SEL.size) return toast(T('localize.err_no_mods'));
   if (!CATS.size) return toast(T('localize.err_no_cats'));
   const box = $('#modalBody');
-  box.querySelector('.loc-go').innerHTML = `<span class="loc-run-note">${T('localize.run_starting')}</span>`;
+  const go = box.querySelector('.loc-go');
+  if (go) go.innerHTML = `<span class="loc-run-note">${T('localize.run_starting')}</span>`;
+  let job;
   try {
-    JOB = await api('/api/localize/run', { mods: [...SEL], cats: [...CATS] });
+    job = await api('/api/localize/run', { mods: [...SEL], cats: [...CATS] });
   } catch (e) {
     toast(e.message, 5000);
     renderLocalize();
     return;
   }
+  // 没同意过就先说明再启动。任务这会儿还没建，服务端一个字都没发出去。
+  if (job && job.need_consent) {
+    openConsentDialog(job.engines || []);
+    return;
+  }
+  JOB = job;
   EDITS = new Map();
   renderProgress();
   POLL = setInterval(pollJob, 600);
+}
+
+/* 首次同意：一张说明，讲清三件事 —— 发给谁、发什么、不发什么。
+   同意一次就记住（服务端存在 data/translate/config.json）；
+   关掉模态就当没点过：不建任务，也不偷偷记成同意。 */
+function openConsentDialog(engines) {
+  const rows = engines.length
+    ? engines.map(e => `<li>${T('localize.consent_engine_row', {
+        name: esc(e.label || ''), target: esc(e.target || ''),
+      })}</li>`).join('')
+    : `<li>${T('localize.engine_none')}</li>`;
+  openModal(T('localize.consent_title'), `
+    <div class="pkg">
+      <div class="pv-note">${T('localize.consent_lead')}</div>
+      <div class="loc-sec">
+        <div class="loc-sec-title">${T('localize.consent_to_title')}</div>
+        <ul class="loc-consent-list" style="margin:0 0 8px 18px;padding:0">${rows}</ul>
+      </div>
+      <div class="loc-sec">
+        <div class="loc-sec-title">${T('localize.consent_send_title')}</div>
+        <div>${T('localize.consent_send')}</div>
+        <div class="loc-sec-title">${T('localize.consent_not_send_title')}</div>
+        <div>${T('localize.consent_not_send')}</div>
+      </div>
+      <div class="pv-note">${T('localize.consent_once')}</div>
+      <div class="set-actions">
+        <button class="btn btn-primary" id="locConsentGo">${T('localize.consent_agree')}</button>
+      </div>
+    </div>`, { wide: true });
+
+  $('#locConsentGo').onclick = async () => {
+    const b = $('#locConsentGo');
+    b.disabled = true;
+    try {
+      await api('/api/localize/consent', {});
+    } catch (e) {
+      toast(e.message, 5000);
+      b.disabled = false;
+      return;
+    }
+    const t = $('#modalTitle');
+    if (t) t.textContent = T('ui.nav_localize');
+    startRun();
+  };
 }
 
 function renderProgress() {

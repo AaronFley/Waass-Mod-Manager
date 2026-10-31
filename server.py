@@ -682,6 +682,7 @@ class Handler(BaseHTTPRequestHandler):
                          for k, v in localize.CAT_LABEL.items()],
                 "engines": engines,
                 "engine_order": cfg.get("order") or [],
+                "consent": bool(cfg.get("consent")),
                 "records": localize_job.history(8),
                 "total_menu": sum(r["menu"] for r in rows),
                 "ready_mods": sum(1 for r in rows if r["ready"]),
@@ -863,6 +864,13 @@ class Handler(BaseHTTPRequestHandler):
             keys = [str(k) for k in (body.get("mods") or [])]
             if not keys:
                 return self._send(*_json({"error": i18n.t("srv.pick_mods_first")}, 400))
+            # 首次同意。必须拦在服务端：前端藏按钮拦不住直接调的接口，
+            # 也不能让「已经点过开始」变成默认同意。
+            # 这一段只回「会发给谁」的清单 —— 不建任务、不建线程、不发任何请求。
+            cfg = translate.config()
+            if not cfg.get("consent"):
+                return self._send(*_json({"need_consent": True,
+                                          "engines": translate.targets(cfg)}))
             cats = body.get("cats")
             try:
                 job = localize_job.start(root, keys,
@@ -872,6 +880,16 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:                   # noqa: BLE001
                 return self._send(*_json(_err(e), 500))
             return self._send(*_json(job))
+
+        if path == "/api/localize/consent":
+            # 用户点了「同意并继续」。只写这一个开关，返回最新配置。
+            try:
+                cfg = translate.save_config({"consent": True})
+            except Exception as e:                   # noqa: BLE001
+                return self._send(*_json(_err(e), 500))
+            return self._send(*_json({"ok": True, "consent": True,
+                                      "engines": translate.targets(cfg),
+                                      "engine_order": cfg.get("order") or []}))
 
         if path == "/api/localize/job/cancel":
             try:

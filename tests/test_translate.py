@@ -6,9 +6,12 @@
 """
 from __future__ import annotations
 
+import json
 import re
 import sys
+import tempfile
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -135,10 +138,87 @@ def main() -> int:
 
     print("\n[10] 引擎注册表")
     ids = set(T.ENGINES)
-    check("至少有免 Key 的两个", {"google", "mymemory"} <= ids, str(ids))
+    check("免 Key 的 MyMemory 还在", "mymemory" in ids, str(ids))
+    check("Index-Translate 也注册了", "indextranslate" in ids, str(ids))
+    check("Index-Translate 也免 Key",
+          getattr(T.ENGINES.get("indextranslate"), "needs_key", True) is False)
+    check("默认链首位是 Index-Translate",
+          (T.DEFAULT_CONFIG.get("order") or [None])[0] == "indextranslate",
+          str(T.DEFAULT_CONFIG.get("order")))
     check("需要 Key 的标了 needs_key",
           any(getattr(c, "needs_key", False) for c in T.ENGINES.values()))
     check("配置里带顺序", isinstance(T.config().get("order"), list))
+    check("下线的引擎不在注册表里", "google" not in ids, str(ids))
+    check("默认链里也没有下线的引擎",
+          "google" not in (T.DEFAULT_CONFIG.get("order") or []),
+          str(T.DEFAULT_CONFIG.get("order")))
+    check("默认链非空", bool(T.DEFAULT_CONFIG.get("order")))
+    check("每个引擎都写了会连的域名",
+          all(getattr(c, "target", "") for c in T.ENGINES.values()),
+          str({k: getattr(c, "target", "") for k, c in T.ENGINES.items()}))
+    check("首次同意默认「还没同意」", T.DEFAULT_CONFIG.get("consent") is False)
+
+    print("\n[11] 老配置兼容（升级前留下的 config.json 里有下线引擎）")
+    with tempfile.TemporaryDirectory() as td:
+        old_dir, old_file = T.DIR, T.CONF_FILE
+        T.DIR, T.CONF_FILE = Path(td), Path(td) / "config.json"
+        try:
+            T.CONF_FILE.write_text(json.dumps({
+                "order": ["google", "mymemory"],
+                "engines": {"google": {"on": True, "keys": []},
+                            "mymemory": {"on": True, "keys": ["k1"]}},
+            }), encoding="utf-8")
+            cfg = T.config()
+            check("下线引擎读不进配置", "google" not in (cfg.get("engines") or {}), str(cfg))
+            # 1.3.2 起：老 order 里没有的新引擎会被追加到末尾，用户原有顺序不动
+            check("order 里的下线引擎被过滤、新引擎追加在末尾",
+                  cfg.get("order") == ["mymemory", "indextranslate"], str(cfg.get("order")))
+            check("用户原来开着的还在",
+                  (cfg.get("engines") or {}).get("mymemory", {}).get("on") is True)
+            check("老配置没有 consent 时按没同意算", cfg.get("consent") is False)
+            check("链路按用户顺序起步、新引擎追加在后",
+                  [e.id for e in T.build_chain(cfg)] == ["mymemory", "indextranslate"],
+                  str([e.id for e in T.build_chain(cfg)]))
+
+            T.save_config({"consent": True})
+            raw = json.loads(T.CONF_FILE.read_text(encoding="utf-8"))
+            check("保存后不会写回下线引擎",
+                  "google" not in json.dumps(raw, ensure_ascii=False), str(raw))
+            check("同意被记住", raw.get("consent") is True, str(raw))
+            check("同意后 config() 读得到", T.config().get("consent") is True)
+
+            T.save_config({"order": ["google", "mymemory"]})
+            raw2 = json.loads(T.CONF_FILE.read_text(encoding="utf-8"))
+            check("手填的下线引擎也写不回去",
+                  raw2.get("order") == ["mymemory", "indextranslate"], str(raw2.get("order")))
+            check("同意状态不因改顺序而丢失", raw2.get("consent") is True, str(raw2))
+        finally:
+            T.DIR, T.CONF_FILE = old_dir, old_file
+
+    print("\n[12] 请求头里的版本号是真实版本")
+    from core.appinfo import APP_VERSION
+
+    seen: dict = {}
+
+    class _Resp:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self, *a):
+            return b'{"responseData":{"translatedText":"ok"},"responseStatus":200}'
+
+    def _fake(req, timeout=None):
+        seen["ua"] = req.get_header("User-agent")
+        return _Resp()
+
+    with mock.patch("urllib.request.urlopen", _fake):
+        T.MyMemoryEngine({}).translate("Auto equip")
+    check("UA 是 Waass/<真实版本>",
+          seen.get("ua") == "Waass/%s" % APP_VERSION, str(seen))
+    check("UA 里没有写死的旧版本号", "Waass/1.2" != seen.get("ua"), str(seen))
 
     print("\n结果：%d 通过 / %d 失败" % (PASS, FAIL))
     return 0 if FAIL == 0 else 1

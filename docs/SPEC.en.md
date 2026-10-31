@@ -197,28 +197,35 @@ an F5 refresh.
 
 ## 9. Automatic Nexus metadata (1.0.2)
 
-### 9.1 The official API is out — but doing nothing is not an option
+### 9.1 Where the data comes from: the site's internal query endpoint
 
-The official API (`api.nexusmods.com`) requires a Personal Key; in testing it
-returns `401` without one, and users explicitly do not want to enter a Key. But
-"just installed a mod and have no idea what it is" is a real problem — without an
-ID there is no author, no cover, no version comparison.
+`POST https://api-router.nexusmods.com/graphql`.
 
-Measured conclusions across three routes (2026-10-25):
+**What it is**: the query endpoint the site's own web frontend uses — read-only, public
+data only, no login, no Key.
 
-| Route | Result |
-|---|---|
-| `www.nexusmods.com/witcher3/mods/<id>` HTML | **403**, Cloudflare `Just a moment...` |
-| Same, loaded via Edge `--headless=new` | Still the challenge page |
-| `api.nexusmods.com/v1/...` | 401, requires a Key |
-| `staticdelivery.nexusmods.com` (image CDN) | Directly reachable (404/200, not 403) |
-| **`POST api-router.nexusmods.com/graphql`** | **200, no login, no Key** |
+**Risk**: it is not in any public documentation; it is an internal endpoint of the site.
+It can be changed, rate-limited, or taken down at any time, with no version compatibility
+promise.
 
-That last one is the endpoint Nexus's own new web frontend uses. Its query exposes
-`legacyMods(ids:[{gameId,modId}])` and `mods(filter:...)` returning a `Mod` type:
-`name / author / version / summary / category / pictureUrl / thumbnailUrl /
-downloads / endorsements / updatedAt / adultContent`. The `gameId` for witcher3
-is fixed at **952**.
+**If it stops working**: there is no fallback to any other non-public endpoint, and no
+page scraping either. No backup endpoint — when it fails, it fails: entries show
+*unrecorded*, and install, scan, and uninstall are not blocked. Missing metadata only
+affects what is displayed.
+
+**How requests identify themselves**: `User-Agent: WaassModManager/<version>` plus
+`Application-Name` / `Application-Version`. Honest identification, not a browser
+disguise.
+
+The shape of the interface (follow this in code, do not guess):
+
+- the query exposes `legacyMods(ids:[{gameId,modId}])` and `mods(filter:...)`, returning
+  a `Mod` type: `name / author / version / summary / category / pictureUrl /
+  thumbnailUrl / downloads / endorsements / updatedAt / adultContent`;
+- the witcher3 `gameId` is fixed at **952**.
+
+> The same wording sits at the top of the module docstring in `core/nexus_meta.py`.
+> Change one, change the other.
 
 ### 9.2 Filename parsing: both generations must be recognized
 
@@ -1327,7 +1334,7 @@ the 4 mod names and 3 item names are all excluded.
 | Tier | Engine | Config | Notes |
 |---|---|---|---|
 | L0 | translation memory + glossary | none | Hits return instantly; repeated strings and terms stay consistent |
-| L1 | Google gtx / MyMemory | none | Key-free; both verified working |
+| L1 | Index-Translate (Bilibili) / MyMemory | none | Two key-free public services; the first is the default lead |
 | L2 | Baidu / others requiring keys | keys required | one per line, rotated |
 
 `core/translate.py` uses only the standard-library `urllib`; no third-party
@@ -1337,6 +1344,45 @@ the run, so a batch never stalls on one flaky endpoint.
 **Multiple-key rotation** is an explicit user request ("configure several keys so
 localization doesn't fail when an endpoint has problems"): `eng.used` tracks how
 often each key was used, and the least-used one is picked each time.
+
+### 1.3.2: Index-Translate (Bilibili) and first-run consent
+
+**Endpoint**: `POST https://index-translate.bilibili.com/v1/chat/completions`
+(OpenAI-compatible).
+
+- The model name is fixed at `Index-Translate-9B`. A wrong name returns 400; the same
+  service also offers `2B` / `35B-A3B` / `Index-Nailong-9B`, and this program uses only
+  9B.
+- **Anonymous request**: no `Authorization` header, no `Origin`. Sending an auth header
+  returns 412 — found by testing, so do not add one "for tidiness".
+- Measured at 321 ms per call. The reply is a chat completion: take
+  `choices[0].message.content` and clean it — strip surrounding quotes and a
+  `译文:`-style prefix, keep the first non-empty line of a multi-line reply. If the
+  result is empty or still the English original, raise `EngineError` and let the next
+  engine take over.
+- **Its status is preview**: free and public, but with no stated quota, SLA, or end date,
+  and it may rate-limit (429). Failure only yields the slot — the existing timeout and
+  "skip after 3 consecutive failures" cover exactly this case.
+- On by default, first in `order`. An existing config that lacks it gets it appended at
+  read time: the user's order is respected, never re-sorted.
+
+**First-run consent is a server-side gate, not a button hidden by the frontend.**
+
+- The switch is `consent` in `data/translate/config.json`, default `false`.
+- `POST /api/localize/run` sees no consent and returns only
+  `{need_consent: true, engines: [...]}`: no job, no thread, no request. Hiding a button
+  in the UI cannot stop a direct call to the endpoint.
+- Consent is remembered after one confirmation. `POST /api/localize/consent` writes that
+  single switch.
+- The list is generated from the engine chain (`translate.targets()`), not hard-coded:
+  engines that are off or lack a key never appear on it, and never receive anything
+  anyway. Adding an engine needs no copy change.
+
+**The same release removed another key-free channel**: the gtx endpoint at
+`translate.googleapis.com`. It is in no public documentation, makes no quota promise, can
+be shut off at any time, and would still send the user's menu text out. "It translates"
+does not outweigh "text leaves the machine with no explanation" and "one day it all
+breaks". Re-adding it means solving those two first.
 
 ### Translation quality: three pieces of engineering
 
@@ -2776,3 +2822,31 @@ to get wrong:
   no repeat within 24 hours, manual checks bypassing the cache, `If-None-Match` once
   stale, an unchanged result on 304, no prompt for an older published version, both
   failure modes, and no traffic at all once the check is disabled.
+
+## 35. 1.3.2: outbound traffic list (2026-10-31)
+
+The program has exactly three outbound points. This table is the single source of
+truth; change any line and update it here.
+
+| Point | Trigger | Default | What is sent | On failure | How to turn it off |
+|---|---|---|---|---|---|
+| Nexus metadata | installing a mod / topping up after launch / manual refresh | on | a list of mod IDs (read-only query) | silent; entries show *unrecorded* | in Settings, or go offline |
+| Program update check | ten seconds after launch, and on manual check | on | nothing (reads the version number from GitHub Releases) | automatic check stays silent; a manual check reports the reason | `update_check: false` (config only; there is no switch in the UI) |
+| Localization translation | the user starts a translation | consent required once | the menu text being translated | a failed string moves to the next engine; if all fail, it is reported | turn off every engine, or decline consent |
+
+Nothing else exists: no telemetry, no account system, no usage data collected, no crash
+reports. That is not a promise, it is the current state — none of it is in the code.
+
+Two details:
+
+- **Every outbound request identifies itself honestly.** Translation sends
+  `Waass/<APP_VERSION>`; metadata sends `WaassModManager/<APP_VERSION>` together with
+  `Application-Name` / `Application-Version`. The version number comes only from
+  `core/appinfo.py`, never written out again elsewhere. Before 1.3.2 translation had
+  `Waass/1.2` hard-coded and metadata posed as a browser; both are gone.
+- **"Off" means the whole path is off**, not just the notice in the UI: no requests are
+  made at all, that feature degrades to local-only, and everything else keeps working.
+  With no network, all three are absent and nothing else changes.
+
+Section 9 (metadata), section 21 (translation) and this section must agree. The public
+counterpart is `docs/network-access.md`: different reader, same statements.

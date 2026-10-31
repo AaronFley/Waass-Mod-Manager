@@ -26,7 +26,7 @@ from pathlib import Path
 from core import i18n
 
 APP_NAME = "Waass Mod Manager"
-APP_VERSION = "1.3.1"
+APP_VERSION = "1.3.2"
 APP_DATE = "2026-10-31"
 APP_REPO = "https://github.com/AaronFley/Waass-Mod-Manager"
 
