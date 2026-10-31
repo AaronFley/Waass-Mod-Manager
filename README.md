@@ -1,8 +1,6 @@
 # Waass Mod Manager
 
-**English** · [简体中文](#chinese)
-
-<a id="english"></a>
+**English** · [简体中文](#简体中文)
 
 ## English
 
@@ -226,8 +224,6 @@ Please report significant bugs through [Issues](https://github.com/AaronFley/Waa
 [MIT](LICENSE)
 
 ---
-
-<a id="chinese"></a>
 
 ## 简体中文
 
