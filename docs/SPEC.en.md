@@ -2735,6 +2735,11 @@ The rule (`core/console.py`, invoked once by `core/__init__.py` on import):
 * with no console (a `--windowed` exe) it does nothing and leaves the devnull
   streams from `_silence_streams()` alone.
 
+One more gap: `tools/coldstart.py`, `build.py` and `tools/i18n_merge.py` print
+**before** importing core, so the package entry point hasn't run yet. Each of
+them calls it explicitly — `core.console.enable_utf8()` where core is imported,
+a bare `sys.stdout.reconfigure` in scripts that stand alone.
+
 It lives in the package entry point rather than being called at each entry point:
 `run.py`, `tests/*` and `tools/*` all go through `core`, and relying on people to
 remember eventually fails (`test_lifecycle` was the one file that imports no core

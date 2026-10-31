@@ -33,6 +33,13 @@ import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# 中文输出要在英文版 Windows（cp1252 控制台）上也打得出来。
+# 这个脚本不 import core，自己切一次，别让一句 print 把工具打崩。
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass
 OUT_DIR = ROOT / "web" / "static"
 OUT_ICO = OUT_DIR / "icon.ico"
 

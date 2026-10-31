@@ -20,6 +20,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+# 中文输出要在英文版 Windows（cp1252 控制台）上也打得出来：
+# 这些脚本会在 import core 之前就 print，包入口的自动切换还没生效。
+from core.console import enable_utf8                             # noqa: E402
+enable_utf8()
+
 
 def build_fake_game(base: Path) -> Path:
     game = base / "game"

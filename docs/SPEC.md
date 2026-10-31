@@ -2268,6 +2268,10 @@ Windows 控制台默认用本地代码页，英文系统是 cp1252，编不出�
   老终端仍不支持时最多一个字变问号，**绝不让进程死在一句日志上**；
 * 没有控制台（`--windowed` 的 exe）直接跳过，不碰 `_silence_streams()` 的 devnull。
 
+还有一类漏网的：`tools/coldstart.py`、`build.py`、`tools/i18n_merge.py` 等在
+**import core 之前**就 print，包入口还没生效，必须各自补一次（前者用
+`core.console.enable_utf8()`，不依赖 core 的独立脚本就地 `sys.stdout.reconfigure`）。
+
 放在包入口而不是各入口各调一次：`run.py`、`tests/*`、`tools/*` 都过 `core`，
 靠人记着调，迟早漏一个（`test_lifecycle` 就是唯一不 import core 的，已单独补）。
 
