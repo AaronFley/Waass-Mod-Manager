@@ -33,6 +33,10 @@ _work*
 docs/competitive-review-*.html
 docs/*评估*.md
 
+# Nexus 上架用的稿子与配图（bbcode 正文、字段表、五张成品图）。
+# 图已经传到页面上，正文每次改版还要接着改，所以留在本地、不进仓库。
+docs/nexus/
+
 # ---- 编辑器 / 系统 ----
 .vscode/
 .idea/
