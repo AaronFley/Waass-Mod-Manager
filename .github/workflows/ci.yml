@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: 语法检查
+        run: python -m compileall -q core server.py run.py tools build.py
+
+      - name: 全部测试
+        shell: bash
+        run: |
+          fail=0
+          for f in tests/test_*.py; do
+            if python "$f" > "/tmp/$(basename "$f").log" 2>&1; then
+              echo "ok   $f"
+            else
+              echo "FAIL $f"
+              tail -30 "/tmp/$(basename "$f").log"
+              fail=1
+            fi
+          done
+          echo "共 $(ls tests/test_*.py | wc -l) 套"
+          exit $fail
+
+      - name: 冷启动（有游戏）
+        run: python tools/coldstart.py
+
+      - name: 冷启动（没装游戏）
+        run: python tools/coldstart.py --no-game
+
+      - name: 能力自检（源码态）
+        run: python run.py --check --check-out build/execheck-src.json

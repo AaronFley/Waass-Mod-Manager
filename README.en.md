@@ -2,7 +2,7 @@
 
 A lightweight mod manager for The Witcher 3 Remastered. Standard library only, touches only what it must, and every step can be undone.
 
-![Main window](docs/screenshots/1.2.5/01-dark-main.png)
+![Main window](docs/screenshots/1.3.0/02-main-en-light.png)
 
 > **Recent update (1.3.0)**: two bugs that only show up once packaged are fixed —
 > "Browse for folder" failed inside the exe (now a native Windows dialog, no Tk
@@ -95,7 +95,7 @@ If it still can't find the game, the main area explains which level to pick — 
 
 The program ships with one: **Settings → Guide**. Ten sections, from first launch through upgrading, your data and troubleshooting. It explains the reasoning, not just button positions (why disabling renames a folder, which `Priority` number wins, why an uncertain Nexus ID is left blank rather than guessed).
 
-![Guide](docs/screenshots/1.2.6/01-guide.png)
+![Guide](docs/screenshots/1.3.0/04-guide-en.png)
 
 The content lives in `web/static/guide.html` and follows the theme — edit that file to change the text, no need to rebuild the UI.
 
