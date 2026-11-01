@@ -541,3 +541,104 @@ def drop_cache() -> None:
 
 def for_mod(report: dict, key: str) -> list[dict]:
     return report.get("by_mod", {}).get(key, [])
+
+
+def index(root: Path, mods: list) -> dict:
+    """把冲突检测内部那几张索引表**原样导出成数据**（只读，不做任何判定）。
+
+    诊断（core/diagnose.py）需要「这个脚本是谁提供的」「哪几份界面资源抢同一
+    个文件」「合订本登记没登记」这些**事实**，但它不能读 analyze() 的
+    title/detail —— 那是后端按当前语言渲染好的句子（缓存 key 里带语言，
+    见 analyze 开头），拿它做字符串反查，切一次语言就全断。
+
+    所以这里单独开一个数据出口：形状与 analyze 内部的 script_map /
+    by_target / ui_owner 一致，判定逻辑一个字都不搬过来，也不改 analyze。
+    它只读：和 analyze 一样只 stat / open，不写任何文件。
+
+    返回：
+      {
+        "root": str, "mods_dir": str,
+        "mods": [{"key", "folder", "enabled", "is_merged"}],
+        "disk_folders": [mods/ 下真实存在的文件夹名（含 `~` 停用前缀）],
+        "scripts": {相对路径小写: [mod_key, ...]},
+        "anno": {(类名, 函数名): {"wrapMethod": [...], "replaceMethod": [...]}},
+        "bundle_ui": [{"mods": [mod_key...], "files": [资源名...]}],
+        "merged": {... merger.merged_state() 原样 ...},
+        "merged_names": [所有可能的合并产物名，小写],
+      }
+    """
+    lay = game_layout(root)
+    mods_root = lay["mods"]
+    mods = list(mods or [])
+    active = [m for m in mods if m.enabled]
+
+    script_map: dict[str, list[str]] = {}
+    anno_owner: dict[tuple[str, str, str], list[str]] = {}
+    for m in active:
+        d = mods_root / m.folder
+        if not d.is_dir():
+            continue
+        for rel in _script_paths(d):
+            script_map.setdefault(rel.lower(), []).append(m.key)
+            meta = scripts_meta.scan(d / rel)
+            for kind, cls, fn in meta["anno"]:
+                anno_owner.setdefault((kind, cls, fn), []).append(m.key)
+
+    # 与 analyze 的 1d 段同形：(类名, 函数名) → {注解种类: [mod_key...]}
+    by_target: dict[tuple[str, str], dict[str, list[str]]] = {}
+    for (kind, cls, fn), keys in anno_owner.items():
+        by_target.setdefault((cls, fn), {}).setdefault(kind, []).extend(keys)
+
+    # 与 analyze 的 3b 段同形：包内资源名 → [mod_key...]，再按 mod 组合并
+    be_owner: dict[str, list[str]] = {}
+    for m in active:
+        d = mods_root / m.folder
+        if not d.is_dir():
+            continue
+        for names in bundle_entries.scan_mod(d).values():
+            for n in names:
+                be_owner.setdefault(n, []).append(m.key)
+
+    ui_groups: dict[tuple, list[str]] = {}
+    for n, keys in be_owner.items():
+        uniq = tuple(sorted(set(keys)))
+        if len(uniq) < 2:
+            continue
+        if bundle_entries.classify(n) == "ui":
+            ui_groups.setdefault(uniq, []).append(n)
+
+    # 合订本状态：登记 / 启用 / 顺序，供诊断判断「合订本没生效」
+    inv = merger.inventory(root)
+    settings = SettingsFile.load(lay["user_config"] / "mods.settings")
+    mstate = merger.merged_state(root, inv, settings)
+
+    disk_folders: list[str] = []
+    if mods_root.is_dir():
+        try:
+            disk_folders = sorted(
+                e.name for e in os.scandir(mods_root)
+                if e.is_dir(follow_symlinks=False))
+        except OSError:
+            disk_folders = []
+
+    names = {str(n).lower() for n in (inv.get("names") or []) if n}
+    for v in (inv.get("merged_name"), mstate.get("name")):
+        if v:
+            names.add(str(v).lower())
+
+    return {
+        "root": str(root),
+        "mods_dir": str(mods_root),
+        "mods": [{"key": m.key, "folder": m.folder,
+                  "enabled": bool(m.enabled),
+                  "is_merged": bool(getattr(m, "is_merged", False))}
+                 for m in mods],
+        "disk_folders": disk_folders,
+        "scripts": script_map,
+        "anno": by_target,
+        "bundle_ui": [{"mods": list(k), "files": sorted(v, key=str.lower)}
+                      for k, v in sorted(ui_groups.items(),
+                                         key=lambda x: -len(x[1]))],
+        "merged": dict(mstate),
+        "merged_names": sorted(names),
+    }

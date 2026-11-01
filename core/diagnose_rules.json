@@ -1,0 +1,154 @@
+{
+  "version": 1,
+  "_about": "报错诊断的关键词与文案表。随程序发布，改这里不用改代码；代码里不许再写死关键词。rules 的顺序就是判定优先级（先命中先算数）。verdict 只能是 certain / likely / partial / unknown，action 只能是 open_conflicts / restore_recent / retry_game / none。",
+  "limits": {
+    "max_text_bytes": 204800,
+    "max_results": 200,
+    "max_line_chars": 4000,
+    "ident_scan_bytes": 50331648,
+    "ident_scan_files": 20000,
+    "ident_scan_file_bytes": 8388608
+  },
+  "patterns": {
+    "kind": "^(Error|Warning|Info)\\b",
+    "owner": "\\[([^\\[\\]]{1,100})\\]",
+    "where": "([^\\s()\\[\\]:]{1,300}\\.ws)\\s*\\(\\s*(\\d{1,7})",
+    "unknown_type": "Unknown\\s+(?:type|class)\\s+'([^']{1,120})'"
+  },
+  "owner_skip": ["^content\\d*$", "^dlc\\d*$"],
+  "merged": {
+    "default_bracket": "mod0000_mergedfiles",
+    "_note": "方括号里出现这个（或台账/设置里记着的其它产物名）时，走合订本那两条规则"
+  },
+  "rules": [
+    {
+      "code": "syntax_broken",
+      "verdict": "certain",
+      "action": "open_conflicts",
+      "keywords": ["unexpected end of file", "found unexpected '}'"],
+      "note": "花括号多一个少一个，典型是在 KDiff3 里手工解冲突时丢了一行。四条规则里唯一能指到「就这一个文件、就这一行」的一类。",
+      "text": {
+        "zh": {
+          "what": "这一行的意思是：『{rel}』这个脚本里的花括号对不上，文件被改坏了。",
+          "what_bare": "这一行说的是花括号对不上 —— 有个脚本文件被改坏了。",
+          "who": "这个文件现在由 {names} 提供，出问题的就是那一份。",
+          "content0": "报错行开头写的是『{owner}』，那是游戏自己的文件；这种情况多半是别的模组动了同一个脚本，游戏本体本身没问题。",
+          "owner": "报错行点名的是『{owner}』。",
+          "nofile": "但这段文本里没带 .ws 文件名，我看不出是哪一个 —— 把带文件名的那几行也一起粘进来。",
+          "next": "去冲突页看这个文件现在都有谁在提供，再决定改哪一份。"
+        },
+        "en": {
+          "what": "This line says the braces in '{rel}' don't match — that script file was broken by an edit.",
+          "what_bare": "This line says some braces don't match — one script file was broken by an edit.",
+          "who": "That file is currently provided by {names} — that's the copy to fix.",
+          "content0": "The line starts with '{owner}', which is the game's own files; usually another mod touched the same script. The game itself is fine.",
+          "owner": "The line names '{owner}'.",
+          "nofile": "But there is no .ws file name in this text, so I can't tell which one — paste the lines that carry file names too.",
+          "next": "Open the conflicts page for this file to see who provides it, then decide which copy to edit."
+        }
+      }
+    },
+    {
+      "code": "merged_stale_ref",
+      "verdict": "likely",
+      "action": "restore_recent",
+      "keywords": ["unknown type"],
+      "note": "合订本里留着引用某个类型的代码，而整个 mods 里已经没有任何模组提供它。样本出处在调研报告 3.2 的 ②。",
+      "text": {
+        "zh": {
+          "what": "报错行说的是合订本『{name}』里的文件。",
+          "missing": "它引用的类型『{ident}』，我把你装的所有模组翻了一遍，没有一个提供它。",
+          "gone": "合订本里还留着引用这个类型的代码，但提供它的那个模组已经不在了 —— 编译时自然找不到。",
+          "disabled_only": "提供这个类型的是 {names}，但那个模组现在是停用状态，等于没加载。",
+          "next_gone": "把那个模组装回来，或者点「撤销上一步」把你刚拿掉的那步撤回，再进游戏试。",
+          "next_disabled": "去模组列表里把它重新启用，再进游戏试。",
+          "no_index": "现在还没读到你的模组列表（没检测到游戏目录），所以没法确认这个类型到底有没有人提供。",
+          "no_folder": "你的 mods 目录里现在没有这个合订本文件夹，这段报错可能是上一次留下的。",
+          "found_elsewhere": "这个类型在 {names} 里是找得到的，所以缺的不是它 —— 这一段我就看不出卡在哪了。",
+          "over_budget": "我把脚本扫到上限还没找到它，这一段不敢下结论，怕给你指错方向。"
+        },
+        "en": {
+          "what": "The line is about a file inside the merged build '{name}'.",
+          "missing": "It references the type '{ident}', and none of the mods you have installed provides it.",
+          "gone": "The merged build still contains code that references this type, but the mod providing it is gone — compilation can't find it.",
+          "disabled_only": "The type is provided by {names}, but that mod is currently disabled, so it isn't loaded.",
+          "next_gone": "Put that mod back, or use Undo to revert the step you just removed, then start the game again.",
+          "next_disabled": "Re-enable it in the mod list, then start the game again.",
+          "no_index": "I don't have your mod list yet (no game folder detected), so I can't confirm whether anything provides this type.",
+          "no_folder": "There is no merged folder in your mods/ right now, so this text is probably from an earlier run.",
+          "found_elsewhere": "The type is defined in {names}, so a missing provider isn't the problem — I can't tell what this line is stuck on.",
+          "over_budget": "I stopped scanning at the size limit without finding it, so I won't guess on this one."
+        }
+      }
+    },
+    {
+      "code": "merged_unregistered",
+      "verdict": "likely",
+      "action": "open_conflicts",
+      "keywords": ["mod0000_mergedfiles"],
+      "note": "合订本文件夹在、但 mods.settings 里没登记 / 被停用 / 顺序不最前。2026-10-27 的事故就是这一条。判据全部来自 merger.merged_state 的数据字段，不读它的 problem 文案。",
+      "text": {
+        "zh": {
+          "what": "报错行说的是合订本『{name}』里的文件。",
+          "no_entry": "这个合订本文件夹在 mods 里是有的，但 mods.settings 里没有它的登记 —— 它会被排到所有模组后面，源模组反过来盖住合并结果。",
+          "disabled": "它的登记被关掉了（Enabled=0），合并结果等于没生效。",
+          "not_min": "它登记了，但顺序排在别人后面（它是 {priority}，别的模组最小是 {min_other}），后加载的模组把它盖住了。",
+          "next": "去冲突页把合订本这一条修好，再进游戏。",
+          "no_index": "现在还没读到你的模组列表（没检测到游戏目录），所以判断不了这个合订本有没有登记、顺序对不对。",
+          "no_folder": "你的 mods 目录里现在没有这个合订本文件夹，这段报错可能是上一次留下的。",
+          "ok_state": "合订本是登记好的、顺序也最前，所以这一条不是「没生效」引起的。"
+        },
+        "en": {
+          "what": "The line is about a file inside the merged build '{name}'.",
+          "no_entry": "That merged folder exists in mods/, but mods.settings has no entry for it — it gets sorted behind every other mod and the source mods cover the merge again.",
+          "disabled": "Its entry is switched off (Enabled=0), so the merge result isn't taking effect.",
+          "not_min": "It has an entry, but it is sorted behind others (it is {priority}, the lowest other mod is {min_other}), so a later mod covers it.",
+          "next": "Open the conflicts page and fix this merged entry, then start the game again.",
+          "no_index": "I don't have your mod list yet (no game folder detected), so I can't check whether the merged build is registered or sorted first.",
+          "no_folder": "There is no merged folder in your mods/ right now, so this text is probably from an earlier run.",
+          "ok_state": "The merged build is registered and sorted first, so this is not a 'not taking effect' problem."
+        }
+      }
+    },
+    {
+      "code": "ghost_folder",
+      "verdict": "certain",
+      "action": "restore_recent",
+      "keywords": [],
+      "note": "方括号里那个文件夹名在 mods/ 下不存在。只排除 content/dlc 这类游戏自己的归属，以及合并产物名（那归合订本两条规则管）。",
+      "text": {
+        "zh": {
+          "what": "报错行开头的『{owner}』应该是一个模组文件夹的名字，但你的 mods 目录里现在没有这个文件夹。",
+          "what_bare": "报错行开头的『{owner}』应该是一个模组文件夹的名字。",
+          "why": "这多半是模组被拿走了，而别的地方（比如旧的合并结果）还留着对它的引用。",
+          "next": "把刚拿掉的那个模组装回来，或者去冲突页看看现在还有谁在提供这些文件。",
+          "no_index": "现在还没读到你的模组列表（没检测到游戏目录），所以判断不了这个文件夹还在不在。"
+        },
+        "en": {
+          "what": "'{owner}' at the start of the line should be a mod folder name, but there is no such folder in your mods/ right now.",
+          "what_bare": "'{owner}' at the start of the line should be a mod folder name.",
+          "why": "Usually the mod was taken away while something else (an old merged build, for instance) still references it.",
+          "next": "Put the mod you just removed back, or open the conflicts page to see who provides these files now.",
+          "no_index": "I don't have your mod list yet (no game folder detected), so I can't check whether that folder is there."
+        }
+      }
+    }
+  ],
+  "unknown": {
+    "code": "unknown",
+    "verdict": "unknown",
+    "action": "restore_recent",
+    "text": {
+      "zh": {
+        "not_mine": "这段不在我认识的范围内 —— 我不敢猜是哪个模组的问题。",
+        "steps": "可以按三步走：先看第一条 Error 行指的是哪个文件；再把最近装过或卸过的那个撤回去；改完点 Retry 让游戏重新编译，不用把游戏关掉重开。",
+        "no_index": "另外，这次没读到你的模组列表，所以只能就文字本身说话。"
+      },
+      "en": {
+        "not_mine": "This one is outside what I recognise — I won't guess which mod is at fault.",
+        "steps": "Try three steps: look at the first Error line to see which file it names; undo the last mod you installed or removed; then hit Retry so the game recompiles (no need to restart it).",
+        "no_index": "Also, I have no mod list this time, so I'm going on the text alone."
+      }
+    }
+  }
+}

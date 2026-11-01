@@ -55,6 +55,7 @@ Three principles apply throughout:
 - Recognizes Script Merger output so merged groups are not reported as conflicts again
 - Checks legacy script encodings and outdated Chinese language tables
 - Merges game-owned config files line by line, and removes only those lines on uninstall
+- Paste the game's script error text into the conflicts dialog and it diagnoses which file and which mod are most likely behind it, on your own machine and never uploaded
 
 **Safety**
 
@@ -288,6 +289,7 @@ Waass 把它们摊开来给你看：哪些模组在生效、谁排在谁前面�
 - 识别 Script Merger 的合并记录，已合并的组不再重复报错
 - 旧版脚本编码与中文语言表版本检查
 - 游戏自带配置按行合并，卸载时只撤销该模组写入的键
+- 把游戏报错的红字粘进冲突检查，指出出错的文件与最可能相关的模组；只在本机匹配，不上传
 
 **安全**
 

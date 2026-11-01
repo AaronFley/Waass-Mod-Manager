@@ -2850,3 +2850,205 @@ Two details:
 
 Section 9 (metadata), section 21 (translation) and this section must agree. The public
 counterpart is `docs/network-access.md`: different reader, same statements.
+
+## 36. 1.3.3: error diagnosis (2026-11-01)
+
+When the game fails, its `Script Compilation Errors` window hands you a list of file
+names and line numbers. Someone with a dozen mods installed does not need a general
+tutorial; they need to know which file is at fault. Following a tutorial and turning
+mods off one at a time can take a dozen attempts before the guilty one falls out.
+
+This release adds a collapsible "The game errored?" block at the bottom of the
+conflicts dialog: paste the red text in, and the program decides locally what that
+line is, which file it names, roughly which mod it belongs to, and what to touch next.
+
+### 36.1 The input is a piece of text, not a log file
+
+The game does not write a script error log. Errors only appear in that window at
+startup, which has a Copy to Clipboard button — so what a user can hand over is text:
+possibly missing its prefix, missing a closing parenthesis, mixed with Chinese
+explanation, or cut off halfway.
+
+Parsing is therefore written to salvage each part on its own: no prefix, look for
+`.ws(line)`; no brackets, fall back to keywords in the message; a missing colon is
+survivable. **Rather miss a line than throw the whole paste away over one odd format.**
+
+The discard rules are hard:
+
+- A `Warning` line is not a conclusion. A pile of script errors is almost always
+  followed by one Warning; treating it as a lead only splits attention.
+- A single line over 4000 characters is skipped instead of being run through a regex —
+  regexes on a wide character set are O(n²), and one line is enough to freeze the UI.
+- Text is clipped at 200KB (preferably on a line boundary) and results stop at 200;
+  past that the UI says only the first N are listed.
+- The owner name comes only from a bracket within the first 100 characters of the
+  line. A bracket containing a path separator or a space is part of the message, not
+  an owner.
+
+### 36.2 The four rules
+
+The rules live in `core/diagnose_rules.json`; **their order is the priority, first hit
+wins**. Keywords, verdicts and wording all live in that file — none of it is hard-coded.
+
+| Rule | When | Verdict | Action |
+|---|---|---|---|
+| `syntax_broken` | braces were broken by an edit | almost certain | open the conflicts page |
+| `merged_stale_ref` | the merged build still references a type nobody provides | probably | undo the last step |
+| `merged_unregistered` | the merged build is unregistered / disabled / sorted late | probably | open the conflicts page |
+| `ghost_folder` | the folder the line names is not in `mods/` | almost certain | undo the last step |
+
+**`syntax_broken` — almost certain.** Only two criteria: the line contains
+`unexpected end of file` or `found unexpected '}'`. Braces do not go out of balance
+any other way, which makes this the only rule that can point at one single file.
+Pointing at it requires the line to carry a `.ws` path: with a path, the script index
+says who provides it — a single provider is named outright, and with no provider while
+the owner is the game itself (see 36.3) the answer is "another mod probably touched the
+same script". **A line with no file name drops to "only this far"** and asks for the
+lines that do carry file names: knowing the braces are broken without knowing which
+file is not a licence to guess.
+
+**`merged_stale_ref` — probably.** Three criteria: the bracket holds a merge product
+name; the message contains `Unknown type 'X'` (or `class`); then `mods/*/content/scripts`
+is searched for a `.ws` that provides that type. The search decides the sentence:
+
+- nothing provides it → probably: the merged build still references it and the mod
+  that provided it is gone; put that mod back, or undo the step just taken.
+- only a disabled mod provides it → still probably, and the next step becomes
+  "re-enable it in the mod list".
+- an enabled mod provides it → drop to "only this far" and say the missing provider is
+  not the problem here, so this line cannot be explained.
+- the scan hit its limit without finding it → **also "only this far", never "absent"**.
+  This is the easiest one to get wrong: reporting "not scanned" as "missing
+  dependency" points at a prerequisite that does not exist. The limits are 8MB per
+  file, 48MB in total, 20,000 files.
+
+**`merged_unregistered` — probably.** The bracket holds a merge product name and that
+product's registration is not good: no entry in `mods.settings` / the entry is switched
+off / it is not sorted first. The three cases get three sentences because the next step
+differs (fix the entry, or fix the order). Conversely, **when the entry is fine and the
+order is right the rule stands down** and leaves the line to "unknown" — a healthy state
+means this is not the cause, and forcing out "the merge isn't taking effect" only
+misleads. If the merged folder does not exist at all, the rule also degrades and says
+the text is probably from an earlier run.
+
+**`ghost_folder` — almost certain.** The bracket looks like a mod folder (not a merge
+product, not matching `^content\d*$` / `^dlc\d*$`), and no such folder exists under
+`mods/` (the `~` prefix of a disabled mod counts as the same folder), and the mod list
+has no such key. The only way that happens is the folder was taken away while something
+else still references it.
+
+### 36.3 The game's own files are never blamed on a mod
+
+Owners such as `content0`, `content1` and `dlc1` are **the game itself**, not mod
+folders. This has to be nailed down, because the obvious bug is: a user has a pile of
+mods, the line says `[content0]`, the program finds no folder named `content0` under
+`mods/`, and flatly announces that the user's `content0` mod is gone — pointing in
+exactly the wrong direction, at a mod that never existed.
+
+Two places enforce it:
+
+- `ghost_folder` skips these owners outright (`owner_skip` in the rules file) and never
+  counts them as a missing folder.
+- When `syntax_broken` sees such an owner and no mod provides the file, it says this is
+  the game's own file, that the game itself is fine, and that another mod probably
+  touched the same script — **naming no mod at all**.
+
+Errors like this only get the general three steps: look at the first Error line to see
+which file it names; undo the last mod installed or removed; then hit Retry so the game
+recompiles (no restart needed).
+
+### 36.4 Why four rules and no fifth
+
+The fifth candidate is "two mods changed the same script without merging". It sounds
+like the most useful one, and it cannot be done: the program can read the merge records
+and the registration state of the merge product, but it cannot read **whether the user
+meant to merge those files, or what was merged and then split again** — that is a
+person's action in an external tool, not something on disk. Judging by "same script,
+not in the merge records" fires for practically every library with a dozen mods, and
+most of those users never intended to merge those files.
+
+**Pointing the wrong way is worse than saying nothing.** Do not loosen this line later:
+reasons that cannot be decided belong in the documentation, not in a guess inside the
+code.
+
+### 36.5 The output contract
+
+Every hit carries six things: **the original line, the owner, the file, the verdict,
+the evidence, the action code.**
+
+There are exactly three verdicts, and these are the words the UI shows:
+
+| Internal | UI |
+|---|---|
+| `certain` | almost certain |
+| `likely` | probably |
+| `partial` | only this far |
+
+A miss is a different thing, not a verdict: the UI says the text is outside what the
+program recognises and that it will not guess which mod is at fault, then gives the
+general three steps — **never a forced cause**. When nothing in the whole paste matches,
+the UI says so (paste the lines carrying Error too) rather than showing a blank panel.
+
+There are exactly four action codes: `open_conflicts`, `restore_recent`, `retry_game`,
+`none`. The backend returns the code only; the sentence shown is mapped by the frontend
+in the current language — **the backend does not compose prose** (except the evidence
+strings, which are paired wording in the rules file).
+
+Rules that need local data **degrade to "only this far"** whenever no scan result is
+available (no game folder chosen yet), and say what is missing. Better to say less than
+to pretend the data was read.
+
+### 36.6 Three red lines
+
+1. **Never suggest verifying game file integrity, deleting the merge output, or
+   reinstalling the game.** In this situation those are respectively useless,
+   destructive to the merge result, and half an hour of the user's time — saying them
+   hands the problem back to the user.
+2. **Never send any of the pasted text.** Not one byte leaves the machine; no network
+   module appears in the code.
+3. **When nothing matches, say so.** Unrecognised errors get the general steps, not a
+   forced cause.
+
+The third one has a side effect worth recording: **no log file**. "Write a log line when
+the rules file is broken" was the obvious move, and it was dropped in favour of "write
+nothing": the reason goes into the return value and stderr, where the UI can show it,
+which beats a log file the user will never find. It also heads off a bug that only
+appears once packaged: a `--windowed` exe has no `sys.stderr`, and printing to it raises,
+which would turn "degrade quietly when the rules are broken" into "diagnosis crashes on
+open". The check now comes first: losing one message is acceptable, crashing is not.
+
+### 36.7 Path normalisation has exactly one entry point
+
+The game writes in-game relative paths (`game\player\playerWitcher.ws`); the scan index
+holds `content/scripts/game/player/playerwitcher.ws`. When those two do not line up,
+every rule is worthless.
+
+The rule: **normalisation always goes through `_norm_rel()` in `core/merger.py`, the
+only place in the repository that handles in-game relative paths.** Diagnosis does not
+grow a second copy — a second copy inevitably disagrees with merging and conflict
+detection, and that disagreement raises no error; it just makes every rule go silent.
+
+Owner names (the thing in the bracket) are always compared in lower case: folder names
+on disk need not match the case used in `mods.settings`, and stopping to care about case
+only loses matches.
+
+### 36.8 Where it lives
+
+- `core/diagnose.py` — parsing and judging. The three hard constraints are stated at the
+  top of the file: send nothing, write nothing, **judge from data only**.
+- `core/diagnose_rules.json` — keywords, verdicts, actions and all wording, shipped with
+  the program. If it cannot be read, diagnosis falls back to an empty shell (structural
+  parsing plus the general three steps); one bad JSON file must not take the program
+  down.
+- `core/conflicts.py` gains `index()` — it exports the conflict detector's internal
+  index tables **as plain data** (who provides which script, the merge registration
+  state, which folders exist under `mods/`). Read-only, and it decides nothing.
+- The server exposes `POST /api/diagnose`, taking a piece of text from the frontend and
+  returning the structure above.
+
+"Judge from data only" is the most important rule of this release: the titles and
+details `analyze()` renders are **sentences generated in the current language**, and
+matching against them means the whole set of judgments breaks the moment the user
+switches language — silently, with everything simply becoming "unknown". Diagnosis
+therefore reads the fields exported by `index()` and none of those sentences; and the
+evidence strings, being written for humans, may never be used as criteria either.

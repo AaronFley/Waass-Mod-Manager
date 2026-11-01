@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import ast
 import json
 import subprocess
 import sys
@@ -25,6 +26,14 @@ sys.path.insert(0, str(ROOT))
 from core.console import enable_utf8                             # noqa: E402
 enable_utf8()
 SEP = ";" if sys.platform == "win32" else ":"
+
+# 诊断规则表必须跟着 exe 走。少带它，程序照常启动、照常“能解析格式”，但四条
+# 规则全灭、说不出原因，而且一声不响 —— 线上没人看得出来。
+# 目标目录写 `core`：core/diagnose.py 的 rules_path() 先找 __file__ 旁边那份
+# （打包后 __file__ 是 <_MEIPASS>/core/diagnose.py），找不到才退回
+# RES_DIR/core/，两条路在 exe 里指的都是 <_MEIPASS>/core/。
+RULES_REL = Path("core") / "diagnose_rules.json"
+RULES_DEST = "core"
 
 VERSION_TEMPLATE = """VSVersionInfo(
   ffi=FixedFileInfo(
@@ -65,6 +74,58 @@ def version_file(ver: str, name: str, exe: str) -> Path:
     return out
 
 
+def check_rules_source() -> bool:
+    """打包前先确认规则表在、能解析 —— 别等打了五分钟才发现带的是个坏文件。"""
+    src = ROOT / RULES_REL
+    if not src.is_file():
+        print(f"缺规则表：{src}")
+        print("  没有它，exe 里的诊断只会解析格式、说不出原因，而且不报错。")
+        return False
+    try:
+        data = json.loads(src.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(f"规则表读不动：{src} → {type(exc).__name__}: {exc}")
+        return False
+    n = len(data.get("rules") or []) if isinstance(data, dict) else 0
+    if not n:
+        print(f"规则表里没有 rules：{src}")
+        return False
+    print(f"规则表：{src}（{src.stat().st_size} 字节，{n} 条规则）")
+    return True
+
+
+def check_rules_packed(build_name: str) -> bool:
+    """打包后核对规则表真的进了 exe。
+
+    只能查构建目录里的 Analysis 清单：exe 内部的解包目录要等它跑起来才有，
+    而 exe 自己的 `--check` 自检（core 侧，不归这里改）不问规则表。清单里
+    有这一条，才算「带上了」。
+    """
+    toc = ROOT / "build" / build_name / "Analysis-00.toc"
+    try:
+        blocks = ast.literal_eval(toc.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, ValueError, SyntaxError) as exc:
+        print(f"  规则表无法核对：读不动 {toc}（{type(exc).__name__}）")
+        return False
+    want = f"{RULES_DEST}/diagnose_rules.json".lower()
+    for block in blocks:
+        if not isinstance(block, list):
+            continue
+        for entry in block:
+            if not (isinstance(entry, tuple) and len(entry) >= 3 and entry[2] == "DATA"):
+                continue
+            dest, src = str(entry[0]).replace("\\", "/"), Path(entry[1])
+            if dest.lower() != want:
+                continue
+            if not src.is_file():
+                print(f"  规则表条目指向的文件不存在：{src}")
+                return False
+            print(f"  规则表已打进 exe：{dest} ← {src.name}（{src.stat().st_size} 字节）")
+            return True
+    print(f"  规则表没进 exe：Analysis 清单里没有 {RULES_DEST}/diagnose_rules.json")
+    return False
+
+
 def main() -> int:
     # 别只找 pyinstaller.exe：Python 升级（版本目录换名）或 pip 装到
     # .../Scripts 时，exe 既不在 PATH 也不在 python.exe 旁边，但 `-m PyInstaller`
@@ -90,6 +151,9 @@ def main() -> int:
     if not icon.is_file():
         subprocess.run([sys.executable, str(ROOT / "tools" / "make_icon.py")], cwd=str(ROOT))
 
+    if not check_rules_source():
+        return 1
+
     args = [
         sys.executable, "-m", "PyInstaller",
         "--noconfirm", "--clean",
@@ -97,6 +161,7 @@ def main() -> int:
         "--windowed",                       # 不要控制台黑框
         "--name", exe_name,
         "--add-data", f"web{SEP}web",
+        "--add-data", f"core/diagnose_rules.json{SEP}core",   # 诊断规则表，与上面同理
         "--version-file", str(version_file(APP_VERSION, APP_NAME, exe_name + ".exe")),
         # 只排掉确定用不上的科学计算库。
         # 注意这里**没有**任何「要留着 tkinter」的说法：1.2.9 就是信了这句话，
@@ -125,6 +190,11 @@ def main() -> int:
 
     mb = exe.stat().st_size / 1024 / 1024
     print(f"\n完成：{exe}（{mb:.1f} MB）")
+
+    # 先核对规则表在不在包里，再问 exe 自己的能力 —— 两条都过才许发布。
+    if not check_rules_packed(exe_name):
+        print("  这份 exe 不要发布。")
+        return 1
 
     # 打包成功 ≠ 功能齐全。必须问 exe 自己一句。
     if not smoke(exe):

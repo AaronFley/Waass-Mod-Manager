@@ -1316,6 +1316,209 @@ function startMergerWatch() {
   CF_TIMER = setInterval(pollMerger, 3000);
 }
 
+/* ---------- 报错诊断 ----------
+   用户把游戏红字整段粘进来，就地问「这是哪一类、指着哪个文件、下一步动哪」。
+   后端只回表态、证据和动作码，界面上的话由这里按当前语言出 —— 后端不掺语言。 */
+const DIAG_VERDICT_KEY = {
+  certain: 'app.diag_v_certain',
+  likely: 'app.diag_v_likely',
+  partial: 'app.diag_v_partial',
+  // unknown 有意不在表里：后端已经把「通用三步走」写进 evidence，再挂个标签只是噪音
+};
+const DIAG_ACTION_KEY = {
+  open_conflicts: 'app.diag_act_conflicts',
+  restore_recent: 'app.diag_act_undo',
+  retry_game: 'app.diag_act_retry',
+};
+/* 游戏自己的目录名（content0 / dlc1 / engine…）。这些从来不是模组。 */
+const DIAG_GAME_OWNED = /^(content\d*|dlc\d*|engine|gameplay)$/i;
+
+function diagModBy(owner) {
+  const low = String(owner || '').toLowerCase();
+  if (!low) return null;
+  const hit = (S.mods || []).find(m =>
+    String(m.key || '').toLowerCase() === low || String(m.folder || '').toLowerCase() === low);
+  if (hit) return hit;
+  const mg = S.data?.scan?.merged;
+  if (mg && String(mg.name || '').toLowerCase() === low) return { name: mg.name };
+  return null;
+}
+
+/* 报错行开头的方括号名直接显示，用户会以为「装了个叫 content0 的模组」。
+   所以先在当前模组列表里找：找到才是模组；没找到、名字又像游戏自己的目录，
+   就说是游戏本体；剩下的（比如已经被卸掉的模组）也不能说成模组，直说不在列表里。 */
+function diagSource(owner) {
+  const name = String(owner || '').trim();
+  if (!name) return null;
+  const mod = diagModBy(name);
+  // 显示文件夹名而不是展示名：报错行里点的是文件夹，两个名字对不上就等于没指路
+  if (mod) {
+    return { text: T('app.diag_src_mod', { name: mod.folder || mod.key || mod.name || name }), cls: 'is-mod' };
+  }
+  if (DIAG_GAME_OWNED.test(name)) return { text: T('app.diag_src_game', { name }), cls: 'is-game' };
+  return { text: T('app.diag_src_absent', { name }), cls: 'is-gone' };
+}
+
+/* 一句话概括一条结果：表态 · 来源 · 文件第几行。复制出去和界面上共用。 */
+function diagHeadText(r) {
+  const bits = [];
+  const vk = DIAG_VERDICT_KEY[r.verdict];
+  if (vk) bits.push(T(vk));
+  const src = diagSource(r.owner);
+  if (src) bits.push(src.text);
+  if (r.rel) bits.push(r.line ? `${r.rel} ${T('app.diag_at_bare', { n: r.line })}` : r.rel);
+  else if (r.line) bits.push(T('app.diag_at_bare', { n: r.line }));
+  return bits.join(' · ');
+}
+
+function diagCopyText(out) {
+  const rows = out.results || [];
+  const lines = [T('app.diag_copy_head')];
+  if (rows.length) {
+    lines.push(T('app.diag_summary', { lines: out.stats?.lines ?? 0, n: rows.length }));
+  }
+  for (const r of rows) {
+    lines.push('');
+    lines.push(diagHeadText(r));
+    (r.evidence || []).forEach(e => lines.push('· ' + e));
+  }
+  return lines.join('\n');
+}
+
+function diagWriteClipboard(text) {
+  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(text);
+  return new Promise((resolve, reject) => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    ta.remove();
+    if (ok) resolve(); else reject(new Error('copy'));
+  });
+}
+
+function runDiagAction(code) {
+  if (code === 'open_conflicts') {
+    // 就在同一个弹窗里：把视线拉到上面的冲突清单，别另开页面
+    const list = $('.cf-list');
+    if (!list) return;
+    list.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    list.classList.remove('diag-flash');
+    void list.offsetWidth;               // 重新触发一次动画
+    list.classList.add('diag-flash');
+    setTimeout(() => list.classList.remove('diag-flash'), 1200);
+    return;
+  }
+  if (code === 'restore_recent') { undoNow(); return; }
+  if (code === 'retry_game') {
+    closeModal(true);
+    toast(T('app.diag_retry_toast'), 5200);
+  }
+}
+
+function renderDiagnose(out) {
+  const box = $('#diagOut');
+  if (!box) return;
+  const rows = out.results || [];
+
+  if (!rows.length) {
+    const warn = [
+      out.truncated ? T('app.diag_truncated') : '',
+      out.capped ? T('app.diag_capped', { n: 0 }) : '',
+    ].filter(Boolean).map(s => `<div class="diag-warn">${esc(s)}</div>`).join('');
+    box.innerHTML = warn + `<div class="diag-none">${esc(T('app.diag_none'))}</div>`;
+    return;
+  }
+
+  const head = `<div class="diag-sum">${esc(T('app.diag_summary', {
+    lines: out.stats?.lines ?? 0, n: rows.length,
+  }))}</div>`;
+  const warn = [
+    out.truncated ? T('app.diag_truncated') : '',
+    out.capped ? T('app.diag_capped', { n: rows.length }) : '',
+  ].filter(Boolean).map(s => `<div class="diag-warn">${esc(s)}</div>`).join('');
+
+  const body = rows.map(r => {
+    const vk = DIAG_VERDICT_KEY[r.verdict];
+    const src = diagSource(r.owner);
+    const ev = Array.isArray(r.evidence) ? r.evidence : [];
+    // evidence[0] 就是原文照抄。原文只从这一条渲染，不碰 r.raw，
+    // 否则同一行报错会在界面上出现两次。
+    const raw = ev[0] || '';
+    const rest = ev.slice(1);
+    const code = r.action?.code || 'none';
+    const actKey = DIAG_ACTION_KEY[code];
+    const at = r.rel
+      ? `<div class="diag-at"><code>${esc(r.rel)}</code>${
+        r.line ? `<span>${esc(T('app.diag_at_bare', { n: r.line }))}</span>` : ''}</div>`
+      : (r.line ? `<div class="diag-at"><span>${esc(T('app.diag_at_bare', { n: r.line }))}</span></div>` : '');
+    return `<div class="diag-row">
+      <div class="diag-head">
+        ${vk ? `<span class="diag-tag is-${esc(r.verdict)}">${esc(T(vk))}</span>` : ''}
+        ${src ? `<span class="diag-src ${src.cls}">${esc(src.text)}</span>` : ''}
+      </div>
+      ${at}
+      ${raw ? `<div class="diag-raw">${esc(raw)}</div>` : ''}
+      ${rest.length ? `<ul class="diag-ev">${rest.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
+      ${actKey ? `<div class="diag-act">
+        <button class="btn btn-sm" data-diag-act="${esc(code)}">${esc(T(actKey))}</button></div>` : ''}
+    </div>`;
+  }).join('');
+
+  box.innerHTML = head + warn + body +
+    `<div class="diag-foot"><button class="btn btn-sm" id="diagCopy">${esc(T('app.diag_copy'))}</button></div>`;
+
+  $$('[data-diag-act]', box).forEach(b => {
+    b.onclick = () => runDiagAction(b.dataset.diagAct);
+  });
+  const cp = $('#diagCopy', box);
+  if (cp) {
+    cp.onclick = async () => {
+      const old = cp.textContent;
+      try {
+        await diagWriteClipboard(diagCopyText(out));
+        cp.textContent = T('app.diag_copied');
+      } catch {
+        cp.textContent = T('app.diag_copy_fail');
+      }
+      setTimeout(() => { cp.textContent = old; }, 1800);
+    };
+  }
+}
+
+function bindDiagnose() {
+  const run = $('#diagRun');
+  const ta = $('#diagText');
+  const note = $('#diagNote');
+  if (!run || !ta) return;
+
+  run.onclick = async () => {
+    const text = ta.value.trim();
+    // 空输入：只提示，不发请求，也不动上一次的结果 —— 用户可能只是想再点一下
+    if (!text) {
+      if (note) { note.textContent = T('app.diag_empty'); note.classList.add('is-bad'); }
+      ta.focus();
+      return;
+    }
+    if (note) { note.textContent = ''; note.classList.remove('is-bad'); }
+
+    const old = run.textContent;
+    run.disabled = true;
+    run.textContent = T('app.diag_running');
+    try {
+      renderDiagnose(await api('/api/diagnose', { text }));
+    } catch (e) {
+      if (note) { note.textContent = T('app.diag_failed', { msg: e.message }); note.classList.add('is-bad'); }
+    } finally {
+      run.disabled = false;
+      run.textContent = old;
+    }
+  };
+}
+
 async function openConflictsDialog(force = false, quiet = false) {
   const rep = await api('/api/conflicts' + (force ? '?force=1' : ''));
   const items = rep.items || [];
@@ -1422,9 +1625,21 @@ async function openConflictsDialog(force = false, quiet = false) {
       <button class="btn btn-sm" id="cfRecheck">${T('app.cf_recheck')}</button>
       <span class="pv-foot" style="align-self:center">
         ${rep.checked_at ? T('app.cf_checked_at', { time: esc(rep.checked_at.replace('T', ' ').slice(5, 16)) }) : ''}</span>
-    </div>`, { wide: true });
+    </div>
+    <details class="diag" id="diagFold">
+      <summary>${T('app.diag_title')}</summary>
+      <div class="diag-hint">${T('app.diag_hint')}</div>
+      <textarea class="diag-input" id="diagText" rows="4" spellcheck="false"
+        placeholder="${esc(T('app.diag_ph'))}"></textarea>
+      <div class="diag-bar">
+        <button class="btn btn-sm btn-primary" id="diagRun">${T('app.diag_run')}</button>
+        <span class="diag-note" id="diagNote"></span>
+      </div>
+      <div class="diag-out" id="diagOut"></div>
+    </details>`, { wide: true });
 
   $('#cfRecheck').onclick = () => openConflictsDialog(true);
+  bindDiagnose();
 
   // 装在别处的 Script Merger：让用户自己指一次，记住路径。
   // 这里必须走服务端的原生文件框（core/picker.py）—— 浏览器页面里没有

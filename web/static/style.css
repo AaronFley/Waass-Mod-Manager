@@ -618,6 +618,11 @@ svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width:
 /* 列表视图 */
 .mods-grid[data-view="list"] { display: flex; flex-direction: column; gap: 0; }
 .mods-grid[data-view="list"] .card {
+  /* 卡片是「定值高度的 flex 列容器」的子项，默认 flex-shrink:1，
+     模组一多就整体等比压扁，标题和图标叠在一起。行高必须按内容算、
+     由外层的纵向滚动去消化溢出 —— 和网格视图那条 grid-auto-rows
+     是同一个坑的同一种解法。 */
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: 34px 28px minmax(0, 1fr) 104px 72px 86px 46px;
   align-items: center;
@@ -1204,6 +1209,97 @@ svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width:
   word-break: break-all;
 }
 .merge-bar-acts { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* ================= 报错诊断（冲突检查弹窗里的工具区） =================
+   默认折叠：正常来看冲突的人不该被一块大输入框挡住。展开后它属于「工具」，
+   排在检查结果和「重新检查」之后，不抢统计条的位置。 */
+.diag {
+  margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.diag > summary {
+  cursor: pointer; list-style: none;
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 500; color: var(--text-2);
+}
+.diag > summary:hover { color: var(--text); }
+.diag > summary::-webkit-details-marker { display: none; }
+/* 三角用边框画，不用 ▸ 字形：小字号下多数中文字体会把它渲染成一个点 */
+.diag > summary::before {
+  content: ""; width: 0; height: 0; flex-shrink: 0;
+  border-left: 4px solid currentColor;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  transition: transform .12s;
+}
+.diag[open] > summary::before { transform: rotate(90deg); }
+.diag-hint { margin-top: 6px; font-size: 11px; color: var(--text-3); line-height: 1.6; }
+.diag-input {
+  display: block; width: 100%; margin-top: 8px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-ctl);
+  background: var(--panel-2); color: var(--text);
+  font-family: ui-monospace, Consolas, monospace; font-size: 11.5px;
+  line-height: 1.6; resize: vertical; min-height: 78px; outline: none;
+}
+.diag-input:focus { border-color: var(--accent-line); box-shadow: var(--ring); }
+.diag-input::placeholder { color: var(--text-3); opacity: .75; }
+.diag-bar { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+/* 按钮要同时装得下「帮我看看」和「正在看…（模组多时第一次会慢几秒）」，
+   不定宽的话点下去整排会跳一下。 */
+.diag-bar .btn { min-width: 96px; }
+.diag-note { font-size: 11px; color: var(--text-3); line-height: 1.5; }
+.diag-note.is-bad { color: var(--danger); }
+
+.diag-out { margin-top: 12px; }
+.diag-sum { font-size: 11.5px; color: var(--text-3); margin-bottom: 8px; }
+.diag-warn { font-size: 11px; color: var(--warn); line-height: 1.6; margin-bottom: 6px; }
+.diag-none { font-size: 12px; color: var(--text-2); line-height: 1.7; padding: 6px 0 2px; }
+.diag-row {
+  padding: 11px 12px; border-radius: var(--radius);
+  background: var(--panel-2); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  margin-bottom: 9px;
+}
+.diag-row:last-of-type { margin-bottom: 0; }
+.diag-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.diag-tag {
+  font-size: 10.5px; padding: 2px 6px; border-radius: 4px;
+  background: var(--panel-4); color: var(--text-2);
+}
+.diag-tag.is-certain { background: var(--ok-soft); color: var(--ok); }
+.diag-tag.is-likely { background: var(--warn-soft); color: var(--warn); }
+.diag-src { font-size: 11px; color: var(--text-2); }
+.diag-src.is-game { color: var(--text-3); }
+.diag-src.is-gone { color: var(--warn); }
+.diag-at { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin-top: 5px; }
+.diag-at code {
+  font-family: ui-monospace, Consolas, monospace; font-size: 10.5px;
+  padding: 1px 5px; border-radius: 4px;
+  background: var(--panel-4); color: var(--text-2); word-break: break-all;
+}
+.diag-at span { font-size: 10.5px; color: var(--text-3); }
+/* 原文那一行：等宽、可折行。它是唯一一次出现的地方（不另渲染 r.raw）。 */
+.diag-raw {
+  margin-top: 8px; padding: 7px 9px; border-radius: var(--radius-ctl);
+  background: rgba(0, 0, 0, .16);
+  font-family: ui-monospace, Consolas, monospace; font-size: 11px;
+  line-height: 1.6; color: var(--text-2);
+  white-space: pre-wrap; word-break: break-all;
+}
+[data-theme="light"] .diag-raw { background: var(--panel-3); }
+.diag-ev { margin: 8px 0 0; padding-left: 16px; }
+.diag-ev li { font-size: 11.5px; color: var(--text-2); line-height: 1.7; margin-bottom: 3px; }
+.diag-ev li:last-child { margin-bottom: 0; }
+.diag-ev li::marker { color: var(--accent); }
+.diag-act { margin-top: 9px; }
+.diag-foot { display: flex; justify-content: flex-end; margin-top: 10px; }
+
+/* 点「看上面的冲突清单」时让上面那块闪一下，省得用户自己找是哪一区 */
+.cf-list.diag-flash { animation: diag-flash 1.1s ease-out; }
+@keyframes diag-flash {
+  from { box-shadow: 0 0 0 2px var(--accent-line); }
+  to { box-shadow: 0 0 0 2px transparent; }
+}
 
 /* ================= 更新检查 ================= */
 .upd-loading { padding: 30px 0; text-align: center; color: var(--text-3); font-size: 12px; }

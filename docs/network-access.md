@@ -54,6 +54,7 @@ The first-run prompt lists the services that will actually receive text, based o
 - No collection of user data: no usage statistics, no analytics — and beyond what the three points above list, no mod list, file names, or paths leave the machine
 - No telemetry, no crash reports, no analytics of any kind
 - Nothing is uploaded anywhere; every request above only reads
+- Script error text you paste into the conflicts dialog is matched on this machine only. It is never sent, stored or written to disk
 
 ### Turning all of it off
 
@@ -115,6 +116,7 @@ With no network connection, the program remains fully usable. Scanning, enabling
 - 不收集用户数据：没有使用统计、没有埋点；除上面三处明确列出的内容外，模组列表、文件名、路径都不会离开这台机器
 - 没有遥测、没有崩溃上报、没有任何形式的埋点
 - 不向任何地方上传内容；上面每一条请求都只是读取
+- 你粘进「冲突检查」的报错文字只在本机匹配，不发送、不保存、不写进任何文件
 
 ### 全部关掉之后
 

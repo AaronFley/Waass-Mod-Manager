@@ -26,6 +26,7 @@ from core import (actions, appinfo, compat, conflicts, downloads, gamever,
                   saves, selfcheck, storage, track, translate, ui as ui_store,
                   winwatch)
 from core import install as installer
+from core import diagnose
 
 APP_DIR = Path(__file__).resolve().parent
 WEB = RES_DIR / "web"
@@ -1187,6 +1188,20 @@ class Handler(BaseHTTPRequestHandler):
             if ok:
                 STATE.refresh()
             return self._send(*_json({"ok": ok, "message": msg}, 200 if ok else 400))
+
+        if path == "/api/diagnose":
+            # 用户把游戏报错粘进弹窗。**只读**：读一遍扫描结果就够，不联网、
+            # 不写盘、不动游戏目录。结论里的 action 只是动作码，界面上那句话
+            # 由前端按语言映射 —— 后端不拼给人看的句子（除了 evidence）。
+            root = STATE.game_root()
+            with STATE.lock:
+                res = STATE.scan_result
+            try:
+                out = diagnose.diagnose(str(body.get("text") or ""), root,
+                                        list(res.mods) if res else [])
+            except Exception as e:                   # noqa: BLE001
+                return self._send(*_json(_err(e, "diagnose_failed"), 500))
+            return self._send(*_json(out))
 
         if path == "/api/open-folder":
             root = STATE.game_root()

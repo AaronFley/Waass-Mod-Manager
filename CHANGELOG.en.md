@@ -5,6 +5,22 @@ Chinese version: [CHANGELOG.md](CHANGELOG.md).
 
 The version number is maintained in one place, `core/appinfo.py`.
 
+## 1.3.3 — 2026-11-01
+
+**The list view breathes again, and game errors can be checked on the spot**
+
+### Fixed
+
+- In the **All Mods** list view, cards were squashed and their icons and text crowded together once you had many mods; they are now full size and the list scrolls
+
+### Added
+
+- **Conflict Check** now takes a pasted game error and points at the file that broke and the mod it likely belongs to, analyzed only on your machine, nothing uploaded
+
+### Improved
+
+- The data the check needs ships with the program, so it works right after download with no extra files
+
 ## 1.3.2 — 2026-10-31
 
 **A second translation engine, and the network story written down**
