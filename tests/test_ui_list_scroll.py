@@ -20,6 +20,14 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+# 下面每条输出都是中文标题；英文版 Windows 的 cp1252 控制台上第一句 print 就会崩
+# （CI 抓到过）。这里不导入任何业务模块，所以没有别处帮忙切码页，必须自己切。
+from core.console import enable_utf8                              # noqa: E402
+
+enable_utf8()
+
 CSS = ROOT / "web" / "static" / "style.css"
 
 fails: list[str] = []
