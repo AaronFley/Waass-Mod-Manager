@@ -6,6 +6,7 @@
 
 跑法：
     python tests/test_config_install.py
+样本包不在仓库里，需先把 WAASS_SAMPLE_DIR 指向存放样本的目录；不设则整组跳过。
 """
 from __future__ import annotations
 
@@ -25,8 +26,11 @@ from core.console import enable_utf8                             # noqa: E402
 
 enable_utf8()
 
-DL = Path(r"D:\download")
-Z_DEBUG = DL / "Debug Console (Next-Gen)-7172-1-0-1671042002.zip"
+# 样本包是别人的客户端 mod，不随源码分发，位置从环境变量取，
+# 免得把某一台机器上的目录写进公开仓库。没设或找不到时本文件整组跳过。
+_SAMPLE_DIR = os.environ.get("WAASS_SAMPLE_DIR", "")
+Z_DEBUG = (Path(_SAMPLE_DIR) / "Debug Console (Next-Gen)-7172-1-0-1671042002.zip"
+           if _SAMPLE_DIR else None)
 
 fails: list[str] = []
 
@@ -78,8 +82,8 @@ def make_fake_pkg(path: Path, name: str, files: dict[str, str]) -> Path:
 
 
 def main() -> int:
-    if not Z_DEBUG.is_file():
-        print("缺少样本包，跳过：", Z_DEBUG.name)
+    if Z_DEBUG is None or not Z_DEBUG.is_file():
+        print("缺少样本包，跳过" + (f"：{Z_DEBUG.name}" if Z_DEBUG else ""))
         return 0
 
     with tempfile.TemporaryDirectory() as tmp:
