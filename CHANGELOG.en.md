@@ -5,6 +5,32 @@ Chinese version: [CHANGELOG.md](CHANGELOG.md).
 
 The version number is maintained in one place, `core/appinfo.py`.
 
+## 1.3.4 — 2026-11-04
+
+**Two new themes, and a leaner interface with fewer steps**
+
+### Added
+
+- Script Merger is now found by a bounded auto-discovery (game folder and adjacent levels, Desktop, Downloads), and its folder can be changed by hand
+- Groups in the sidebar can now be deleted; deleting one changes only the grouping, not any mod's enabled state or load order
+- The save-backup panel is narrower and adds a cloud-save conflict notice at the bottom (Steam Cloud / CDPR cross-platform cloud saves)
+
+### Improved
+
+- Two themes: a warm black-and-gold dark and a warm paper-white light, with square corners and thin rules
+- The wordmark uses Cinzel, bundled with the program and never loaded over the network
+- Mod cards are now poster-style covers with overlaid titles; enable and disable moved to the detail panel on the right
+- **Settings → Download folder** is reduced to a single row with one **Browse** button
+- Conflict Check explanations fold into the top category buttons and open as a layer on click
+- Load order lists enabled mods only, gains search and a pin-to-top action in tighter rows; disabled mods are folded out of the order
+- The Nexus and Storage descriptions in Settings fold into a **?** popover beside each section title
+
+### Fixed
+
+- The version shown on the wordmark now matches the program version
+- The **My Groups** sidebar title and its description line up correctly
+- The built-in guide now matches the 1.3.4 interface
+
 ## 1.3.3 — 2026-11-01
 
 **The list view breathes again, and game errors can be checked on the spot**

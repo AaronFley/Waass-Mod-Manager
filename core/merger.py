@@ -37,6 +37,7 @@
 from __future__ import annotations
 
 import os
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -74,6 +75,187 @@ def _custom_exe() -> Path | None:
     return p if p.is_file() else None
 
 
+# ---------------- 自动发现 ----------------
+# Script Merger 是绿色程序：官方和教程都是「解压到任意目录，运行 exe，
+# 在它自己的界面里选游戏目录」。所以它装在哪没有任何注册表或固定路径可查。
+# 1.3.x 及以前只查 `<游戏根目录>/Merger/`，等于假定用户按整合包的目录结构摆，
+# 新用户照教程解压到桌面就永远「没检测到」。
+#
+# 现在的做法：在几个**一定会看的地方**扫一两层，扫不到就算了。
+# 为什么不搜全盘：一分钟起步，而且盘上常年躺着几个废弃副本，
+# 找到的那个未必是用户在用的那个 —— 与其猜错，不如让他指一次，指完就记住。
+_SCAN_TTL = 120.0
+_SCAN: dict[str, tuple[float, Path | None]] = {}
+
+# 这些目录下面不可能放合并器，跳过能省掉大半时间（mods 里动辄上百个子目录）
+_SKIP_DIRS = {
+    "mods", "dlc", "content", "bin", "r4game", "textures", "movies",
+    "node_modules", "__pycache__", "$recycle.bin", "system volume information",
+}
+# 候选目录封顶。上一层要是「所有游戏都放这儿」的大目录，两层全展开会到几百个，
+# Windows 上几百次列目录就是一秒多。够用就行 —— 找不到还有「选择位置」。
+_MAX_DIRS = 150
+
+
+def _looks_like_merger(name: str) -> bool:
+    """文件名像不像合并器。不做严格匹配 —— 汉化版、改名版都叫得乱七八糟。"""
+    return _name_score(name) < 9
+
+
+def _name_score(name: str) -> int:
+    """越像正品分越低。用来在几个候选里挑，不是用来排除。
+
+    `NotAMergerApp.exe` 这种也含 merger，但一个装在别处、叫得又不那么像的
+    程序，不该盖过真正叫 ScriptMerger 的那个。
+    """
+    if name in EXE_NAMES:                    # WitcherScriptMerger.exe / ScriptMerger.exe
+        return 0
+    n = name.lower()
+    if not n.endswith(".exe"):
+        return 9
+    if "scriptmerger" in n or "script_merger" in n:
+        return 1
+    if n.startswith("merger") or "merger" in n:
+        return 2
+    return 9
+
+
+def _under(p: Path, root: Path) -> bool:
+    try:
+        Path(p).resolve().relative_to(Path(root).resolve())
+        return True
+    except (ValueError, OSError):
+        return False
+
+
+def _config_says(exe: Path, root: Path) -> bool:
+    """这个副本是不是为当前这个游戏配置过。
+
+    Script Merger 把游戏路径写在同目录的 `*.exe.config` / `*.dll.config` 里。
+    读得到并且指向当前游戏，那基本就是用户在用的那个，而不是硬盘上的旧副本。
+    读不出来只当没这条证据，不影响别的判断。
+    """
+    target = str(root).replace("/", "\\").rstrip("\\").lower()
+    if not target:
+        return False
+    try:
+        for f in exe.parent.glob("*.config"):
+            try:
+                if f.stat().st_size > 1024 * 1024:
+                    continue
+                raw = f.read_bytes()
+            except OSError:
+                continue
+            for enc in ("utf-8", "utf-16", "mbcs"):
+                try:
+                    txt = raw.decode(enc, errors="ignore")
+                except (LookupError, UnicodeError):
+                    continue
+                if txt and target in txt.replace("\\\\", "\\").replace("/", "\\").lower():
+                    return True
+    except OSError:
+        pass
+    return False
+
+
+def _scan_dirs(root: Path) -> list[Path]:
+    """要列哪几个目录。每个目录只看自己这一层，不往里递归。
+
+    覆盖的摆放习惯：游戏目录里、游戏目录里自建的工具文件夹、和游戏并排的
+    工具文件夹、桌面、下载。总量封顶，别让「上一层是个装满游戏的大目录」
+    把扫描拖成几秒钟。
+    """
+    out: list[Path] = []
+
+    def add(d: Path | None, depth: int) -> None:
+        if d is None or len(out) >= _MAX_DIRS:
+            return
+        try:
+            if not d.is_dir() or d in out:
+                return
+        except OSError:
+            return
+        out.append(d)
+        if depth <= 0:
+            return
+        try:
+            subs = sorted(d.iterdir(), key=lambda p: p.name.lower())
+        except OSError:
+            return
+        for sub in subs:
+            if len(out) >= _MAX_DIRS:
+                return
+            try:
+                if not sub.is_dir() or sub.name.lower() in _SKIP_DIRS:
+                    continue
+            except OSError:
+                continue
+            add(sub, depth - 1)
+
+    root = Path(root)
+    add(root, 1)                         # 游戏根目录 + 它的子目录（Merger\ 在这）
+    add(root.parent, 2)                  # 隔壁：Games\Merger、Games\Tools\xxx
+    try:
+        add(root.parent.parent, 0)       # 再上一层本身
+    except (OSError, ValueError):
+        pass
+
+    home = Path.home()
+    add(home / "Desktop", 1)
+    add(home / "OneDrive" / "Desktop", 1)
+    add(home / "Downloads", 1)
+    return out
+
+
+def _cache_key(root: Path) -> str:
+    try:
+        return str(Path(root).resolve()).lower()
+    except OSError:
+        return str(root).lower()
+
+
+def forget_discovery() -> None:
+    """记住/清除过路径之后叫一次，下次重新找。"""
+    _SCAN.clear()
+
+
+def _discover(root: Path) -> Path | None:
+    """猜 Script Merger 在哪。找不到返回 None，永远不抛异常。"""
+    key = _cache_key(root)
+    now = time.time()
+    hit = _SCAN.get(key)
+    if hit and now - hit[0] < _SCAN_TTL:
+        return hit[1]
+
+    ranked: list[tuple[tuple[int, ...], Path]] = []
+    for rank, d in enumerate(_scan_dirs(root)):
+        try:
+            entries = list(d.iterdir())
+        except OSError:
+            continue
+        for p in entries:
+            if not _looks_like_merger(p.name):
+                continue
+            try:
+                if not p.is_file():
+                    continue
+            except OSError:
+                continue
+            # 排序依据（越小越优先）：先看是不是在游戏目录里，再看它的
+            # config 认不认这个游戏，再看文件名像不像正品，最后看谁先被扫到。
+            ranked.append(((0 if _under(p, root) else 1,
+                            0 if _config_says(p, root) else 1,
+                            _name_score(p.name),
+                            rank), p))
+
+    best: Path | None = None
+    if ranked:
+        ranked.sort(key=lambda x: x[0])
+        best = ranked[0][1]
+    _SCAN[key] = (now, best)
+    return best
+
+
 def set_exe(path: str | Path) -> Path:
     """记住「装在别处的 Script Merger」。下次启动直接用它，不用再选一遍。"""
     from .paths import load_config, save_config
@@ -84,6 +266,7 @@ def set_exe(path: str | Path) -> Path:
     cfg = load_config()
     cfg["merger_exe"] = str(p)
     save_config(cfg)
+    forget_discovery()
     return p
 
 
@@ -93,27 +276,42 @@ def clear_exe() -> None:
     cfg = load_config()
     if cfg.pop("merger_exe", None) is not None:
         save_config(cfg)
+    forget_discovery()
 
 
 def merger_dir(root: Path) -> Path:
-    """台账所在目录。手动指定过就跟着那个 exe 走 —— 装在别处时台账也在那边。"""
-    custom = _custom_exe()
-    if custom is not None:
-        return custom.parent
+    """台账（MergeInventory.xml / 设置文件）在哪。
+
+    1.3.x 及以前：一律猜 `<游戏根目录>/Merger`，跟 exe 实际装在哪无关 ——
+    所以一旦用户在别处指定了 exe，台账仍然在旧位置找，读出来是空的。
+
+    现在跟着 exe 走，并且在它旁边两个位置都看一眼：新版把台账放在 exe
+    同目录，老版本放在 exe 同级的 Merger\\ 下。谁有台账算谁的。
+    """
+    exe = exe_path(root)
+    if exe is not None:
+        base = exe.parent
+        if (base / INVENTORY).is_file():
+            return base
+        sub = base / MERGER_DIR
+        if (sub / INVENTORY).is_file():
+            return sub
+        # 都还没有台账（还没合并过）：按有没有设置文件判断它是哪种版本
+        if sub.is_dir():
+            return sub
+        return base
     return Path(root) / MERGER_DIR
 
 
 def exe_path(root: Path) -> Path | None:
-    """Script Merger 的主程序。没装就返回 None，调用方据此显示引导。"""
+    """Script Merger 的主程序。没装就返回 None，调用方据此显示引导。
+
+    顺序：用户指定过的 → 自动发现。自动发现只扫几个常见位置，见 _scan_dirs。
+    """
     custom = _custom_exe()
     if custom is not None:
         return custom
-    d = Path(root) / MERGER_DIR
-    for name in EXE_NAMES:
-        p = d / name
-        if p.is_file():
-            return p
-    return None
+    return _discover(Path(root))
 
 
 def installed(root: Path) -> bool:

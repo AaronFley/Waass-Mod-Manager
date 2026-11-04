@@ -8,7 +8,7 @@ A mod manager for **The Witcher 3: Wild Hunt — Remastered**. It is built with 
 
 A single 9 MB executable. Double-click to run — no installation, no .NET, no other mod manager. Built on the Python standard library with plain HTML/CSS/JS, with zero third-party runtime dependencies.
 
-![Main window](docs/screenshots/1.3.0/02-main-en-light.png)
+![Main window](docs/screenshots/1.3.4/02-main-en-light.png)
 
 ### Design approach
 
@@ -22,17 +22,20 @@ Three principles apply throughout:
 - **Every step is reversible.** Write operations go onto an undo stack, uninstalls go to a quarantine folder, and localization keeps the originals.
 - **Never guess.** Uncertain Nexus IDs, incomparable version numbers, and text too long to fit are reported as they are, not decided for you.
 
+The interface ships two themes — a warm black-and-gold dark and a warm paper-white light — drawn with square corners and thin rules. The wordmark uses Cinzel, bundled with the program, so it never loads over the network.
+
 ### Features
 
 **Mod management**
 
 - Scans and identifies mods, DLC, menu files, and language files
-- One-click enable/disable: disabling renames the folder with a `~`, leaving `mods.settings` untouched and load order intact
-- Drag rows to reorder, or use the dedicated load-order panel
+- Enable or disable a mod from its detail panel: disabling renames the folder with a `~`, leaving `mods.settings` untouched and load order intact
+- Drag rows to reorder in the load-order panel, which lists enabled mods only and adds search and a pin-to-top action in tighter rows; disabled mods are folded out and take no part in the order
 - Imports 8 archive formats including zip, 7z, and rar, with a write-path preview
 - Uninstalls move files to a quarantine folder instead of deleting them
-- Custom groups and tags, with `#tag` search
+- Custom groups and tags, with `#tag` search; groups can be deleted, which only changes the sidebar grouping and leaves enable state and load order untouched
 - Batch selection: toggle several mods at once and undo them together
+- The download folder is set with a single **Browse** button in Settings
 
 **Nexus integration**
 
@@ -53,6 +56,7 @@ Three principles apply throughout:
 
 - Duplicate scripts, duplicate menu files, colliding interface files inside resource bundles, and functions annotated by several mods
 - Recognizes Script Merger output so merged groups are not reported as conflicts again
+- Script Merger is discovered automatically near the game folder, on the Desktop and in Downloads, and its folder can be changed by hand
 - Checks legacy script encodings and outdated Chinese language tables
 - Merges game-owned config files line by line, and removes only those lines on uninstall
 - Paste the game's script error text into the conflicts dialog and it diagnoses which file and which mod are most likely behind it, on your own machine and never uploaded
@@ -112,7 +116,7 @@ python run.py --port 8765  use a specific port
 
 A full guide is built in: **Settings → Guide**.
 
-![Guide](docs/screenshots/1.3.0/04-guide-en.png)
+![Guide](docs/screenshots/1.3.4/04-guide-en.png)
 
 ### Does it connect to the internet?
 
@@ -222,7 +226,7 @@ To use another source, override it in `data/config.json`:
 {"update_feed": "https://your-domain/waass/version.json"}
 ```
 
-The custom JSON shape is `{"version": "1.3.0", "url": "download page", "notes": "what changed"}`. To disable the check entirely, use `{"update_check": false}`.
+The custom JSON shape is `{"version": "1.3.4", "url": "download page", "notes": "what changed"}`. To disable the check entirely, use `{"update_check": false}`.
 
 ### Contributing
 
@@ -242,7 +246,7 @@ Please report significant bugs through [Issues](https://github.com/AaronFley/Waa
 
 9 MB 单文件，双击即用：不需要安装、不需要 .NET、不需要其他模组管理器。基于 Python 标准库与原生 HTML/CSS/JS，运行时零第三方依赖。
 
-![主界面](docs/screenshots/1.3.0/01-main-zh.png)
+![主界面](docs/screenshots/1.3.4/01-main-zh.png)
 
 ### 设计取向
 
@@ -256,17 +260,20 @@ Waass 把它们摊开来给你看：哪些模组在生效、谁排在谁前面�
 - **每一步都能撤回**：写操作进入撤销栈，卸载进隔离区，汉化保留原件。
 - **不猜**：认不准的 Nexus ID、比不出的版本号、放不下的译文，都如实标注，不替你做决定。
 
+界面提供暖黑金深色与暖纸白浅色两套主题，直角细线；字标使用 Cinzel 字体，随程序内置，不联网加载。
+
 ### 功能
 
 **模组管理**
 
 - 扫描并识别模组、DLC、菜单文件与语言文件
-- 一键启用 / 禁用：禁用即给文件夹名加 `~`，不修改 `mods.settings`，加载顺序原样保留
-- 列表拖拽调整加载顺序，也可在「加载顺序」面板集中修改
+- 在模组详情面板中启用 / 禁用：禁用即给文件夹名加 `~`，不修改 `mods.settings`，加载顺序原样保留
+- 在「加载顺序」面板中拖拽调整顺序；面板只列启用中的模组，提供搜索与「置顶」，行距更紧凑；禁用模组折叠不参与排序
 - zip / 7z / rar 等 8 种格式导入，先预览写入路径
 - 卸载进隔离区，可随时恢复
-- 自定义分组与标签，支持 `#标签` 搜索
+- 自定义分组与标签，支持 `#标签` 搜索；分组可删除，删除只改侧栏归类，不影响模组启用状态与加载顺序
 - 批量选择：一次勾选多个模组同时开关
+- 设置中的下载目录用一个「浏览选择」按钮即可指定
 
 **Nexus 联动**
 
@@ -287,6 +294,7 @@ Waass 把它们摊开来给你看：哪些模组在生效、谁排在谁前面�
 
 - 脚本同名、菜单重名、资源包内界面文件撞车、同一函数被多个模组注解
 - 识别 Script Merger 的合并记录，已合并的组不再重复报错
+- Script Merger 自动在游戏目录附近、桌面与下载中查找，也可手动「更换目录」
 - 旧版脚本编码与中文语言表版本检查
 - 游戏自带配置按行合并，卸载时只撤销该模组写入的键
 - 把游戏报错的红字粘进冲突检查，指出出错的文件与最可能相关的模组；只在本机匹配，不上传
@@ -346,7 +354,7 @@ python run.py --port 8765  指定端口
 
 程序内附完整说明书：**设置 → 使用说明**，讲的是判断依据而非按钮位置。
 
-![使用说明](docs/screenshots/1.3.0/03-guide-zh.png)
+![使用说明](docs/screenshots/1.3.4/03-guide-zh.png)
 
 ### 它会联网吗
 
@@ -456,7 +464,7 @@ python tools/coldstart.py --no-game
 {"update_feed": "https://你的域名/waass/version.json"}
 ```
 
-自定义 JSON 格式为 `{"version": "1.3.0", "url": "下载页", "notes": "更新说明"}`。关闭检查可写 `{"update_check": false}`。
+自定义 JSON 格式为 `{"version": "1.3.4", "url": "下载页", "notes": "更新说明"}`。关闭检查可写 `{"update_check": false}`。
 
 ### 参与项目
 

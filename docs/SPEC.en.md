@@ -3052,3 +3052,75 @@ matching against them means the whole set of judgments breaks the moment the use
 switches language — silently, with everything simply becoming "unknown". Diagnosis
 therefore reads the fields exported by `index()` and none of those sentences; and the
 evidence strings, being written for humans, may never be used as criteria either.
+
+## 37. 1.3.4: interface reskin and interaction decluttering (2026-11-04)
+
+This release is mostly a visual and interaction pass: two themes, a card wall and reusable overlays replace the scattered controls that were there before, so each action has one entry point. The constraints and reasons follow. Interface wording still obeys the bilingual discipline of §30.
+
+### 37.1 Two themes via CSS variables, on a warm palette
+
+Both themes are driven by the same set of CSS custom properties: the dark one is warm black with gold accents, the light one warm paper white. They share square corners, thin rules and the same spacing; only the colour variables differ.
+
+- Never write a separate set of selectors for one theme: colour always goes through a variable, so a new control only references variables and never checks which theme is active.
+- No rounded corners, shadows or gradients in this spec; the outline is 1px rules and whitespace only.
+- "Disabled" in the detail panel is shown as an iron-blue counter-emphasis block against the gold accent. It is a status colour, not a new theme colour.
+
+### 37.2 Cinzel ships with the program, under the OFL
+
+The wordmark font Cinzel is a local file shipped with the program; the page references no online font address.
+
+- The font file goes into the build output and `@font-face` points only at a package-relative path; no `https://` font link appears.
+- Cinzel is used under the SIL Open Font License (OFL), which permits bundling with the program; no font service that needs a network check is introduced.
+- This is the hard constraint behind "font is local": the wordmark looks the same offline and adds no outbound point (see 37.8).
+
+### 37.3 The card-wall grid, and why the per-card toggle is gone
+
+The mod list is a responsive card-wall grid: the cover fills the card and the title is overlaid along its lower edge. A card only displays and selects; it carries no write action.
+
+Enable and disable are gathered into the detail panel on the right. The reasons:
+
+- Once the cover is a poster with the title pressed onto it, there is no stable place for a toggle that does not cover the title.
+- State has one source of truth. Toggles spread across every card mean batch actions, keyboard actions and the detail panel each read their own copy and drift out of sync; with one place to switch, the list only renders state.
+- Freed from write actions, the grid can lay out purely by cover ratio, so rows are more compact.
+
+"Disabled" is rendered as a counter-emphasis block rather than a greyed-out switch: showing a state and offering an action are kept apart, so a block of colour is not mistaken for a clickable button.
+
+### 37.4 Three reusable pieces
+
+Three places need the same overlay behaviour (category buttons opening an explanation, the "?" beside a section title opening help), so they are gathered into three reusable pieces instead of one copy per page:
+
+- `openSheet()` — the shared explanation layer: opens, closes, handles the backdrop and focus, with content supplied by the caller.
+- `bindJumpChips()` — the category buttons at the top of Conflict Check hand the matching explanation to `openSheet()` on click.
+- `bindHelp()` — the "?" beside Settings section titles wires the Nexus and Storage descriptions into the same layer.
+
+The pieces own only the overlay mechanism; every explanation string still comes from the i18n tables, never hard-coded in JS.
+
+### 37.5 No new terminology
+
+Status words keep the original three: `enabled / disabled / unrecognised` (已启用 / 已禁用 / 未识别). Reskinning is no reason to coin new terms (renaming "disabled" to "archived" or "inactive"), or §30's string table, conflict-check conclusions and diagnosis output would each say something different.
+
+All on-screen wording goes through i18n keys; no concatenation or hard-coded Chinese strings in templates.
+
+### 37.6 Script Merger bounded auto-discovery
+
+Script Merger no longer has to sit at a fixed `<game root>/Merger/`; it is found by bounded auto-discovery and its folder can be changed by hand.
+
+- The search is bounded: the game folder and its adjacent levels, the Desktop and Downloads — no whole-disk scan.
+- Hits are cached, so relaunching does not rescan; a folder chosen by hand takes precedence and updates the cache.
+- Discovery only locates the executable and changes nothing inside the game folder; merging still follows the existing boundary of read-only records plus launch.
+
+### 37.7 Group deletion touches library.json only
+
+The "My Groups" sidebar gains deletion. Deleting a group rewrites only the grouping field in `library.json`:
+
+- No mod's enabled state changes, and no folder under `mods/` is renamed.
+- `mods.settings` and the load order are untouched.
+- A group is a UI classification, not a set of mods; deleting one is not uninstalling or disabling anything.
+
+This is fixed because letting classification and enabled state share one write would make deleting a group silently rewrite the user's enable configuration — a cost far above the benefit.
+
+### 37.8 Version number, i18n key count and outbound points
+
+- The version shown on the wordmark is read from `core/appinfo.py`, not hard-coded in a template or stylesheet; the version number is still maintained in one place, `appinfo`.
+- This release has **1058** keys in each of `zh.json` and `en.json`. Their key sets must be equal; new strings go through the merge script.
+- **No new outbound points**: Cinzel is a local file inside the package and is never loaded over the network; the three outbound points recorded in `docs/network-access.md` stay as they are, and no fourth is added.

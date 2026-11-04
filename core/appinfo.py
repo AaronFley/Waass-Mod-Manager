@@ -26,8 +26,8 @@ from pathlib import Path
 from core import i18n
 
 APP_NAME = "Waass Mod Manager"
-APP_VERSION = "1.3.3"
-APP_DATE = "2026-11-01"
+APP_VERSION = "1.3.4"
+APP_DATE = "2026-11-04"
 APP_REPO = "https://github.com/AaronFley/Waass-Mod-Manager"
 
 # 默认更新源。用户没在 config.json 里填 update_feed 时用它，

@@ -317,6 +317,53 @@ def main() -> int:
               merger.ensure_registered(SettingsFile.load(cfg_file),
                                        merger.inventory(g9b), g9b)["changed"] is False)
 
+        # ---- 自动发现：Script Merger 不装在游戏目录里也要找得到 ----
+        # 它是个绿色程序，教程教的就是「解压到任意目录」。1.3.x 只认
+        # <游戏根目录>/Merger/，新用户照教程解压到桌面就一直「没检测到」。
+        with tempfile.TemporaryDirectory() as disc_tmp:
+            disc = Path(disc_tmp)
+            # 把 home 指到空目录，免得测试机上真实桌面里真的有合并器
+            old_home = os.environ.get("USERPROFILE")
+            os.environ["USERPROFILE"] = str(disc / "home")
+            try:
+                g10 = fresh_game(disc, "game")
+
+                merger.forget_discovery()
+                check("没装时不乱认", merger.exe_path(g10) is None,
+                      str(merger.exe_path(g10)))
+
+                own = g10 / "WitcherScriptMerger" / "WitcherScriptMerger.exe"
+                own.parent.mkdir(parents=True, exist_ok=True)
+                own.write_bytes(b"MZ")
+                merger.forget_discovery()
+                check("游戏目录里的自定义文件夹能找到", merger.exe_path(g10) == own,
+                      str(merger.exe_path(g10)))
+
+                own.unlink()
+                side = disc / "Tools" / "Merger" / "ScriptMerger.exe"
+                side.parent.mkdir(parents=True, exist_ok=True)
+                side.write_bytes(b"MZ")
+                merger.forget_discovery()
+                check("和游戏并排的工具目录能找到", merger.exe_path(g10) == side,
+                      str(merger.exe_path(g10)))
+
+                # 同一个目录里躺着一个名字也含 merger 的无关程序，不能顶掉正品
+                (side.parent / "NotAMergerApp.exe").write_bytes(b"MZ")
+                merger.forget_discovery()
+                check("干扰程序不盖过正品", merger.exe_path(g10) == side,
+                      str(merger.exe_path(g10)))
+
+                # 台账跟着 exe 走，而不是死认 <游戏根>/Merger
+                (side.parent / "MergeInventory.xml").write_text("<Merges/>", encoding="utf-8")
+                check("台账目录跟着 exe 走", merger.merger_dir(g10) == side.parent,
+                      str(merger.merger_dir(g10)))
+            finally:
+                if old_home is None:
+                    os.environ.pop("USERPROFILE", None)
+                else:
+                    os.environ["USERPROFILE"] = old_home
+                merger.forget_discovery()
+
     print(f"\n通过 {PASS} 项，失败 {FAIL} 项")
     return 0 if FAIL == 0 else 1
 

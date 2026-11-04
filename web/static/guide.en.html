@@ -35,7 +35,7 @@
 
   <section class="gd-sec">
     <h4>Enable / Disable</h4>
-    <p>The toggle on each card is your on/off switch. <b>Disabling prefixes the folder
+    <p>Open a mod card and use the enable / disable button in the detail panel on the right. <b>Disabling prefixes the folder
       name with a <code>~</code></b> (<code>modHoods</code> becomes <code>~modHoods</code>).
       The game only loads folders that start with <code>mod</code> and never even sees
       one starting with <code>~</code> — as if it were uninstalled, except nothing was
@@ -65,9 +65,10 @@
       <code>mods.settings</code>.</p>
     <p>When two mods change the same file, <b>the one with the lower number takes
       effect</b>. Equal numbers are undefined behavior; the app flags duplicates and
-      asks you to separate them. Drag &amp; drop is available with the
-      "list view + all mods + sort by load order" combination; dragging only assigns
-      numbers to enabled mods — disabled ones keep theirs untouched.</p>
+      asks you to separate them. Open "Load order" on the left — it lists enabled
+      mods only: search by name, use the ↑ ↓ and ⇈ on each row to reorder, then
+      press "Save order" to apply; disabled mods are folded to the bottom and take
+      no part in the order.</p>
   </section>
 
   <section class="gd-sec">
@@ -86,9 +87,11 @@
     <p><b>Script Merger</b>: when two mods change the same script, it stitches them
       into a single "merged files" mod. Mods built for the Remastered version generally
       don't need merging — <b>reach for it when you run a lot of legacy mods, or when
-      the game throws script errors on launch</b>. If it lives in the <code>Merger</code>
-      folder in your game root it's found automatically; installed anywhere else, point
-      to it once via "I've installed it, set the path" and it remembers.</p>
+      the game throws script errors on launch</b>. The app looks for it automatically
+      within a bounded set of places — the game folder and nearby levels, Desktop and
+      Downloads (with caching) — and shows the folder it found; if it's elsewhere or
+      the wrong one was picked, choose it once via "Locate" / "Change folder" and it
+      remembers.</p>
   </section>
 
   <section class="gd-sec">
@@ -199,7 +202,7 @@
   </section>
 
   <div class="gd-foot">
-    This guide covers 1.3.0. If the app ever disagrees with this page, trust the app —
+    This guide covers 1.3.4. If the app ever disagrees with this page, trust the app —
     that's our bug, and issue reports are welcome.
   </div>
 </div>

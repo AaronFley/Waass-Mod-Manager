@@ -245,7 +245,9 @@ function renderSidebar() {
         const on = S.filter.type === 'group' && S.filter.value === gr.id;
         return `<button class="nav-item ${on ? 'is-on' : ''}" data-t="group" data-v="${esc(gr.id)}"
           data-drop="group" title="${T('app.drop_hint')}">
-          <span>${esc(gr.name)}</span><em>${gr.count}</em></button>`;
+          <span>${esc(gr.name)}</span><em>${gr.count}</em><span class="nav-del"
+            data-delgroup="${esc(gr.id)}" role="button" tabindex="-1"
+            title="${T('app.group_delete')}">×</span></button>`;
       }).join('');
     }
   }
@@ -361,9 +363,8 @@ const isLocked = () => !!S.data?.game_running;
 
 const WRITE_SEL = [
   '[data-act="toggle"]', '[data-act="savePrio"]', '[data-act="uninstall"]',
-  '#instGo', '#ordSave', '#saveFull', '#saveInc', '#stgCleanSafe', '#setAddDir',
-  '#setGameDir', '#optNexusMeta', '#optNexusCover',
-  '[data-pkg]', '[data-save]', '[data-stg]', '[data-rmdir]', '#btnUndo',
+  '#instGo', '#ordSave', '#saveFull', '#saveInc', '#stgCleanSafe', '#setGameDir', '#optNexusMeta', '#optNexusCover',
+  '[data-pkg]', '[data-save]', '[data-stg]', '[data-swapdir]', '#btnUndo',
   '#pickOn', '#pickOff',
 ].join(',');
 
@@ -438,29 +439,37 @@ function renderList() {
   }
 
   wrap.innerHTML = list.map(m => {
-    // 封面只放一个最要紧的标记，多了就是噪音
-    const badges = [];
+    // 合订本只读：不给开关、不许拖。它能生效的前提就是「排第一且启用」，
+    // 任何手动操作都只会把合并结果弄失效（2026-10-27 的事故）。
+    const ro = !!m.is_merged;
     const cf = conflictsOf(m.key);
-    if (m.update_available) badges.push(`<span class="badge badge-danger">${T('app.badge_update')}</span>`);
-    else if (cf.length) badges.push(`<span class="badge badge-warn">${T('app.badge_attention')}</span>`);
+
+    // 封面角标只回答「现在要我做什么」：已禁用是状态戳，可更新/要注意是角标。
+    // 一张 196px 的卡挂四个章就成了标签墙，所以可更新和冲突只出一个。
+    const chips = [];
+    if (!m.enabled) chips.push(`<span class="badge badge-stored">${T('common.disabled')}</span>`);
+    if (m.update_available) chips.push(`<span class="badge badge-upd">${T('app.badge_update')}</span>`);
+    else if (cf.length) chips.push(`<span class="badge badge-warn">${T('app.badge_attention')}</span>`);
+    if (ro) chips.push(`<span class="badge badge-ok">${T('app.readonly')}</span>`);
+
+    // 列表那格只有 78px：只放一个，多了就只剩省略号
+    const listBadge = ro ? ''
+      : m.update_available ? `<span class="badge badge-danger">${T('app.badge_update')}</span>`
+        : cf.length ? `<span class="badge badge-warn">${T('app.badge_attention')}</span>` : '';
 
     const cover = m.thumbnail
       ? `<img src="/${esc(m.thumbnail)}" alt="" loading="lazy" onerror="this.remove()">`
       : '';
     const sel = S.selected === m.key ? 'is-on' : '';
-    // 合订本只读：不给开关、不许拖。它能生效的前提就是「排第一且启用」，
-    // 任何手动操作都只会把合并结果弄失效（2026-10-27 的事故）。
-    const ro = !!m.is_merged;
     const picked = S.picked.has(m.key);
 
-    return `<article class="card ${m.enabled ? '' : 'is-off'} ${sel} ${ro ? 'is-merged' : ''} ${related.has(m.key) ? 'is-related' : ''} ${picked ? 'is-picked' : ''}"
+    return `<article class="card ${m.enabled ? '' : 'is-off'} ${sel} ${ro ? 'is-merged' : ''} ${m.update_available ? 'is-upd' : ''} ${related.has(m.key) ? 'is-related' : ''} ${picked ? 'is-picked' : ''}"
       data-key="${esc(m.key)}" draggable="${ro || S.picking ? 'false' : 'true'}" style="--h:${hueOf(m)}">
       ${S.picking && !ro ? `<button class="pick ${picked ? 'is-on' : ''}" data-act="pick" title="${picked ? T('app.pick_cancel') : T('app.pick_select')}"></button>` : ''}
-      ${ro ? '' : `<button class="switch ${m.enabled ? 'is-on' : ''}" data-act="toggle" title="${m.enabled ? T('app.click_disable') : T('app.click_enable')}"></button>`}
       <div class="cover">
         ${cover}
         ${m.thumbnail ? '' : `<div class="cover-initial">${esc(ro ? 'MG' : initials(m.name))}</div>`}
-        <div class="cover-badges">${ro ? `<span class="badge badge-ok">${T('app.readonly')}</span>` : badges.join('')}</div>
+        <div class="cover-badges">${chips.join('')}</div>
       </div>
       <div class="card-body">
         <div class="card-name">${esc(m.name_cn || m.name)}</div>
@@ -470,7 +479,7 @@ function renderList() {
       </div>
       <span class="list-cat">${esc(catLabel(m.category))}</span>
       <span class="list-state">${ro ? T('app.auto_top') : (m.enabled ? T('common.enabled') : T('common.disabled'))}</span>
-      <span class="list-badge">${badges[0] || ''}</span>
+      <span class="list-badge">${listBadge}</span>
       <span class="list-prio">${m.priority ?? '—'}</span>
     </article>`;
   }).join('');
@@ -854,6 +863,7 @@ function runModalHooks() {
 }
 
 function openModal(title, html, opts = {}) {
+  closeSheet();                // 换面板时，上一层的说明浮层不能留在上面
   runModalHooks();
   clearModalGuards();          // 上一个面板的「未保存」拦截不该管到新面板
   $('#modalTitle').textContent = title;
@@ -874,9 +884,57 @@ function closeModal(force = false) {
       try { if (fn() === false) return false; } catch { /* 同上 */ }
     }
   }
+  closeSheet();
   runModalHooks();
   $('#modalMask').hidden = true;
   return true;
+}
+
+/* ---------- 二级浮层：说明 / 单条详情 ----------
+   主弹窗的 DOM 不能动 —— 用户点完「这是什么」得回到原样，不能重开一遍
+   （冲突检查重开就要重新扫一遍硬盘）。所以这层独立挂在 body 上，
+   有自己的遮罩，比 .modal-mask 高一档；关它不动主弹窗。
+
+   opts.acts: [{ id, label, cls }]，按钮统一走事件委托，不用每处再 bind。 */
+function openSheet(title, html, opts = {}) {
+  closeSheet();
+  const el = document.createElement('div');
+  el.className = 'sheet-mask';
+  el.id = 'sheetMask';
+  el.innerHTML = `
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-head">
+        <h3>${esc(title)}</h3>
+        <button class="icon-btn" id="sheetX" aria-label="${esc(T('ui.close'))}">
+          <svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"></path></svg>
+        </button>
+      </div>
+      <div class="sheet-body" id="sheetBody">${html}</div>
+      ${(opts.acts || []).length ? `<div class="sheet-foot">${opts.acts.map(a =>
+        `<button class="btn btn-sm ${a.cls || ''}" data-sheet-act="${esc(a.id)}">${esc(a.label)}</button>`
+      ).join('')}</div>` : ''}
+    </div>`;
+  document.body.appendChild(el);
+
+  el.addEventListener('click', e => { if (e.target === el) closeSheet(); });
+  $('#sheetX').onclick = () => closeSheet();
+  el.tabIndex = -1;
+  el.focus();
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.stopPropagation(); closeSheet(); }
+  });
+  // 点遮罩里任何地方都不该把 Esc 冒到主弹窗，主弹窗的 keydown 在 document 上
+  el.addEventListener('keydown', e => e.stopPropagation());
+  el.querySelectorAll('[data-sheet-act]').forEach(b => {
+    const fn = (opts.on || {})[b.dataset.sheetAct];
+    if (fn) b.onclick = () => fn(b);
+  });
+  return el;
+}
+
+function closeSheet() {
+  const el = document.getElementById('sheetMask');
+  if (el) el.remove();
 }
 
 
@@ -1047,7 +1105,7 @@ function renderDetails(m) {
     ${m.note_cn ? `<div class="detail-note">${esc(m.note_cn)}</div>` : ''}
 
     <div class="detail-quick">
-      <button class="btn ${m.enabled ? '' : 'btn-primary'}" data-act="toggle">${m.enabled ? T('ui.pick_off') : T('ui.pick_on')}</button>
+      <button class="btn ${m.enabled ? 'btn-counter' : 'btn-primary'}" data-act="toggle">${m.enabled ? T('ui.pick_off') : T('ui.pick_on')}</button>
       <button class="btn" data-act="folder">${T('app.open_folder')}</button>
       ${m.nexus_id
         ? `<button class="btn" data-act="nexus">${T('app.nexus_page')}</button>
@@ -1168,9 +1226,36 @@ async function newGroup() {
   } catch (e) { toast(T('app.create_failed', { msg: e.message }), 4000); }
 }
 
+/* 删分组只动 library.json 里那一条记录，不碰 mods.settings、不碰 mod 目录，
+   所以模组的启用状态和加载顺序都不会变 —— 少的只是「归类」这一层。 */
+async function deleteGroup(gid) {
+  const g = (S.data?.library?.groups || []).find(x => x.id === gid);
+  if (!g) return;
+  if (!confirm(T('app.group_delete_confirm', { name: g.name }))) return;
+  try {
+    await api('/api/library', { action: 'delete_group', id: gid });
+    S.data.library = await api('/api/library');
+    if (S.filter.type === 'group' && S.filter.value === gid) {
+      S.filter = { type: 'all', value: null };
+    }
+    renderSidebar(); renderList();
+    toast(T('app.group_deleted', { name: g.name }));
+  } catch (e) { toast(T('app.group_delete_failed', { msg: e.message }), 4000); }
+}
+
 /* ---------- 交互 ---------- */
 document.addEventListener('click', async (e) => {
   if (e.target.closest('#btnNewGroup')) { e.stopPropagation(); newGroup(); return; }
+
+  // 删除分组。必须在 .nav-item 之前判断：× 是分组条目里的一层，
+  // 不拦下来就会先当成「切到这个分组」。
+  const delGrp = e.target.closest('[data-delgroup]');
+  if (delGrp) {
+    e.stopPropagation();
+    e.preventDefault();
+    deleteGroup(delGrp.dataset.delgroup);
+    return;
+  }
 
   const nav = e.target.closest('.nav-item');
   if (nav) {
@@ -1519,16 +1604,28 @@ function bindDiagnose() {
   };
 }
 
+/* 模组标签点了要回主界面并选中它。冲突面板和说明浮层里都有这种标签，
+   而浮层挂在 body 上、不在 #modalBody 里 —— 所以抽出来两边共用。 */
+function bindJumpChips(root) {
+  if (!root) return;
+  root.querySelectorAll('[data-jump]').forEach(b => {
+    b.onclick = () => {
+      closeModal(true);
+      S.filter = { type: 'all', value: null };
+      renderSidebar(); renderList();
+      select(b.dataset.jump);
+    };
+  });
+}
+
 async function openConflictsDialog(force = false, quiet = false) {
   const rep = await api('/api/conflicts' + (force ? '?force=1' : ''));
   const items = rep.items || [];
   const st = rep.stats || {};
 
-  const stat = (label, v, cls = '') =>
-    `<div class="cf-stat ${cls}"><b>${v}</b><span>${label}</span></div>`;
-
-  // 1.1.1 起条目变多了（资源包竞争、注解叠加、文字表版本…），平铺一列会看不清。
-  // 按「这是哪一类问题」分组，组内按严重程度排。分类表放前端，后端只管产出。
+  // 顶部那五个数字原来只是摆设。现在它们是入口 —— 每一格说清「这一格在查什么」，
+  // 点开的浮层里既有解释、也有这一类的条目。说明文字不再压在面板上，
+  // 面板只留「需要你动手」的那几条。
   const CF_CAT = {
     merge: 'app.cf_cat_merge', res: 'app.cf_cat_res', script: 'app.cf_cat_script',
     text: 'app.cf_cat_text', other: 'app.cf_cat_other',
@@ -1541,6 +1638,39 @@ async function openConflictsDialog(force = false, quiet = false) {
     w3strings_stale: 'text', w3strings_clash: 'text',
   };
   const LV_ORDER = { merge: 0, warn: 1, info: 2, ok: 3 };
+  const catOf = it => CF_MAP[it.code] || 'other';
+  const byLevel = list => list.slice()
+    .sort((a, b) => (LV_ORDER[a.level] ?? 9) - (LV_ORDER[b.level] ?? 9));
+
+  const CODE_SCRIPT = new Set(['script_merged', 'script_overlap', 'anno_wrap', 'anno_replace',
+    'ws_encoding', 'menu_xml_clash', 'w3strings_stale', 'w3strings_clash']);
+  const CODE_RES = new Set(['bundle_ui', 'bundle_data']);
+  const CODE_MERGE = new Set(['script_merged', 'merge_stale', 'merge_empty', 'merge_unregistered']);
+
+  // n 用的是原来那五个数字（脚本总数、抢界面的文件数、合订本组数…），
+  // 数字本身不动，只是从「贴在墙上的标签」变成「能按下去的按钮」。
+  const tiles = [
+    {
+      id: 'scripts', n: st.script_files || 0, label: 'app.cf_stat_scripts', cls: '',
+      pick: it => CODE_SCRIPT.has(it.code), why: 'app.cf_why_scripts',
+    },
+    {
+      id: 'bundle', n: st.bundle_ui || 0, label: 'app.cf_stat_bundle', cls: st.bundle_ui ? 'is-warn' : '',
+      pick: it => CODE_RES.has(it.code), why: 'app.cf_why_bundle',
+    },
+    {
+      id: 'merged', n: st.merged_groups || 0, label: 'app.merged', cls: st.merged_groups ? 'is-ok' : '',
+      pick: it => CODE_MERGE.has(it.code), why: 'app.cf_why_merged',
+    },
+    {
+      id: 'pending', n: st.merge || 0, label: 'app.cf_stat_pending', cls: st.merge ? 'is-merge' : '',
+      pick: it => it.level === 'merge', why: 'app.cf_why_pending',
+    },
+    {
+      id: 'warn', n: st.warn || 0, label: 'app.cf_stat_warn', cls: st.warn ? 'is-warn' : '',
+      pick: it => it.level === 'warn' || it.level === 'info', why: 'app.cf_why_warn',
+    },
+  ];
 
   const cardHtml = it => `
     <div class="cf-item cf-${it.level}">
@@ -1553,42 +1683,68 @@ async function openConflictsDialog(force = false, quiet = false) {
         ? `<span class="muted">${T('app.cf_files_more', { n: it.files.length })}</span>` : ''}</div>` : ''}
     </div>`;
 
-  const grouped = {};
-  items.forEach(it => {
-    const cat = CF_MAP[it.code] || 'other';
-    (grouped[cat] = grouped[cat] || []).push(it);
-  });
+  const tileHtml = t => `<button class="cf-stat ${t.cls}" data-cf-tile="${t.id}"
+      title="${esc(T('app.cf_tile_hint'))}">
+      <b>${t.n}</b><span>${T(t.label)}</span>
+    </button>`;
 
-  const rows = items.length ? ['merge', 'res', 'script', 'text', 'other']
-    .filter(c => grouped[c])
-    .map(c => `
-      <div class="cf-group">
-        <div class="cf-group-title">${T(CF_CAT[c])}<em>${grouped[c].length}</em></div>
-        ${grouped[c]
-          .sort((a, b) => (LV_ORDER[a.level] ?? 9) - (LV_ORDER[b.level] ?? 9))
-          .map(cardHtml).join('')}
-      </div>`).join('') : `
-    <div class="cf-empty">
-      <div class="cf-empty-title">${T('app.cf_none_title')}</div>
-      <div class="cf-empty-sub">${T('app.cf_none_sub', { scripts: st.script_files || 0, bundles: st.bundle_mods || 0 })}</div>
-    </div>`;
+  // 一格点开：这类在查什么 + 这一类有哪些条目（完整说明都在这里，不在面板上）
+  const openCatSheet = t => {
+    const list = byLevel(items.filter(t.pick));
+    openSheet(T(t.label), `
+      <p class="sheet-lead">${T(t.why, { n: t.n })}</p>
+      <div class="sheet-sub">${T('app.cf_sheet_items')}<em>${list.length}</em></div>
+      ${list.length
+        ? `<div class="cf-sheet-list">${list.map(cardHtml).join('')}</div>`
+        : `<div class="cf-sheet-none">${T('app.cf_sheet_none')}</div>`}`);
+    bindJumpChips($('#sheetBody'));
+  };
+
+  // 一条点开：这就是原来压在面板上的那段说明，现在按需展开
+  const openItemSheet = it => {
+    openSheet(it.title, `
+      <div class="sheet-tags"><span class="cf-line-tag">${T(CF_CAT[catOf(it)])}</span></div>
+      <p class="sheet-lead">${esc(it.detail)}</p>
+      ${(it.mods || []).length ? `<div class="sheet-sub">${T('app.cf_sheet_mods')}</div>
+        <div class="cf-mods">${it.mods
+          .map(k => `<button class="tag cf-mod" data-jump="${esc(k)}">${esc(k)}</button>`).join('')}</div>` : ''}
+      ${(it.files || []).length ? `<div class="sheet-sub">${T('app.cf_sheet_files')}</div>
+        <div class="cf-files">${it.files.map(f => `<code>${esc(f)}</code>`).join('')}</div>` : ''}`);
+    bindJumpChips($('#sheetBody'));
+  };
+
+  // 面板上只留真的要做点什么的：待合并（merge）和需要注意（warn）。
+  // info / ok 那两类（注解叠加、已合并）去对应的数字里看，不占版面。
+  const act = byLevel(items.filter(it => it.level === 'merge' || it.level === 'warn'));
+  const rows = act.length
+    ? `<div class="cf-lines">${act.map((it, i) => `
+        <button class="cf-line cf-${it.level}" data-cf-item="${i}">
+          <span class="cf-line-dot" aria-hidden="true"></span>
+          <span class="cf-line-t">${esc(it.title)}</span>
+          <span class="cf-line-tag">${T(CF_CAT[catOf(it)])}</span>
+          ${(it.mods || []).length
+            ? `<span class="cf-line-n">${T('app.cf_line_mods', { n: it.mods.length })}</span>` : ''}
+          <span class="cf-line-chev" aria-hidden="true">›</span>
+        </button>`).join('')}</div>`
+    : `<div class="cf-clear">
+        <b>${T('app.cf_clear_title')}</b>
+        <span>${T('app.cf_clear_sub')}</span>
+      </div>`;
 
   // Script Merger 只在真的还有未合并的脚本、或合并记录失效时才值得启动。
   // 只是想看「已合并」的详情，就不该弹它出来。
   // 注意：merger 段在 stats 里面，不在顶层。
+  // 1.4 起这条只留一行状态 —— 「合并由它自己做、本程序只负责启动」这类解释
+  // 挪进「已合并」那一格的浮层里，别让状态条变成一段文章。
   const mg = st.merger || {};
   const needMerge = (st.merge || 0) > 0 || (mg.stale || 0) > 0;
-  // 合订本不生效是「什么冲突都没有、但游戏一定启动失败」的那一类，
-  // 比有待合并的脚本更紧急，所以单独一条红条，按钮直接送去修。
   const bad = !!mg.problem;
   const gone = mg.custom_path || '';
   const mergeBar = !mg.found ? `
     <div class="merge-bar is-miss">
       <div class="merge-bar-txt">
         <b>${T('app.cf_merger_missing')}</b>
-        ${gone ? `<span>${T('app.cf_merger_gone', { path: esc(gone) })}</span>
-          ` : `<span>${T('app.cf_merger_why')}</span>`}
-        <span class="merge-why">${T('app.cf_merger_note')}</span>
+        <span>${gone ? T('app.cf_merger_gone', { path: esc(gone) }) : T('app.cf_merger_why')}</span>
       </div>
       <div class="merge-bar-acts">
         <button class="btn btn-sm" id="cfMergeNexus">${T('app.cf_merger_dl')}</button>
@@ -1605,25 +1761,22 @@ async function openConflictsDialog(force = false, quiet = false) {
     <div class="merge-bar">
       <div class="merge-bar-txt">
         <b>${mg.custom ? T('app.cf_merger_ready_custom') : T('app.cf_merger_ready')}</b>
-        <span>${T('app.cf_merger_desc')}
-          ${mg.custom ? `<button class="link-btn" id="cfMergeReset">${T('app.cf_merger_reset')}</button>` : ''}</span>
+        <span class="merge-path" title="${esc(mg.exe || '')}">${esc(mg.dir || mg.exe || '')}</span>
       </div>
-      <button class="btn btn-sm ${needMerge ? 'btn-primary' : ''}" id="cfMergeOpen">${T('app.open_merger')}</button>
+      <div class="merge-bar-acts">
+        ${mg.custom ? `<button class="link-btn" id="cfMergeReset">${T('app.cf_merger_reset')}</button>` : ''}
+        <button class="btn btn-sm" id="cfMergeLocate">${T('app.cf_merger_change')}</button>
+        <button class="btn btn-sm ${needMerge ? 'btn-primary' : ''}" id="cfMergeOpen">${T('app.open_merger')}</button>
+      </div>
     </div>`);
 
   openModal(T('ui.nav_conflicts'), `
-    <div class="cf-stats">
-      ${stat(T('app.cf_stat_scripts'), st.script_files || 0)}
-      ${stat(T('app.cf_stat_bundle'), st.bundle_ui || 0, st.bundle_ui ? 'is-warn' : '')}
-      ${stat(T('app.merged'), st.merged_groups || 0, st.merged_groups ? 'is-ok' : '')}
-      ${stat(T('app.cf_stat_pending'), st.merge || 0, st.merge ? 'is-merge' : '')}
-      ${stat(T('app.cf_stat_warn'), st.warn || 0, st.warn ? 'is-warn' : '')}
-    </div>
+    <div class="cf-stats">${tiles.map(tileHtml).join('')}</div>
     ${mergeBar}
-    <div class="cf-list">${rows}</div>
-    <div class="set-actions" style="margin-top:12px">
+    ${rows}
+    <div class="cf-foot">
       <button class="btn btn-sm" id="cfRecheck">${T('app.cf_recheck')}</button>
-      <span class="pv-foot" style="align-self:center">
+      <span class="pv-foot">
         ${rep.checked_at ? T('app.cf_checked_at', { time: esc(rep.checked_at.replace('T', ' ').slice(5, 16)) }) : ''}</span>
     </div>
     <details class="diag" id="diagFold">
@@ -1639,6 +1792,12 @@ async function openConflictsDialog(force = false, quiet = false) {
     </details>`, { wide: true });
 
   $('#cfRecheck').onclick = () => openConflictsDialog(true);
+  $$('[data-cf-tile]').forEach(b => {
+    b.onclick = () => openCatSheet(tiles.find(t => t.id === b.dataset.cfTile));
+  });
+  $$('[data-cf-item]').forEach(b => {
+    b.onclick = () => openItemSheet(act[Number(b.dataset.cfItem)]);
+  });
   bindDiagnose();
 
   // 装在别处的 Script Merger：让用户自己指一次，记住路径。
@@ -1703,14 +1862,7 @@ async function openConflictsDialog(force = false, quiet = false) {
       }
     };
   }
-  $$('#modalBody [data-jump]').forEach(b => {
-    b.onclick = () => {
-      closeModal(true);
-      S.filter = { type: 'all', value: null };
-      renderSidebar(); renderList();
-      select(b.dataset.jump);
-    };
-  });
+  bindJumpChips($('#modalBody'));
 
   CF_STATS = { merge: st.merge || 0, warn: st.warn || 0, merged: st.merged_groups || 0 };
   // 记下台账当前的样子，后面靠它判断「用户是不是刚在 Script Merger 里合完」
@@ -1973,6 +2125,8 @@ document.addEventListener('keydown', e => {
     return;
   }
   if (e.key === 'Escape') {
+    // 说明浮层压在最上面，Esc 先关它，别把底下的主弹窗一起收了
+    if (document.getElementById('sheetMask')) { closeSheet(); return; }
     if (!$('#modalMask').hidden) { closeModal(); return; }
     $('#q').blur();
   }

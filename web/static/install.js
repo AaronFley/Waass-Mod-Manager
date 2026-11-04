@@ -478,7 +478,8 @@ async function openSavesDialog() {
         <div class="pkg-group-title">${T('install.group_backups')}<em>${items.length}</em></div>
         ${rows || `<div class="inst-hint">${T('install.no_backups')}</div>`}
       </div>
-    </div>`, { wide: true });
+      <div class="save-note">${T('install.saves_cloud_note')}</div>
+    </div>`);
 
   const doBackup = async (mode, btn) => {
     btn.disabled = true;

@@ -45,9 +45,11 @@ window.__WAASS_PAGE__ = "%%WAASS_PAGE%%";</script>
     <!-- 1.2.3：品牌区换成主视觉图标 + 金色字标。图标用 64px 源缩到 26px，
          不用 16px 那张 —— 小图放大必然发虚。 -->
     <img class="brand-mark" src="/static/icon-64.png" alt="Waass" width="26" height="26">
+    <!-- 字标只在这几个字母上用 Cinzel（本地字体，见 style.css 顶部 @font-face），
+         副行是等宽小字。两行都不能换成正文那条系统字体栈。 -->
     <div class="brand-text">
-      <strong>Waass</strong>
-      <span>Mod Manager</span>
+      <strong class="brand-word">Waass</strong>
+      <span class="brand-sub">v%%WAASS_VERSION%%</span>
     </div>
   </div>
 

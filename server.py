@@ -497,6 +497,9 @@ class Handler(BaseHTTPRequestHandler):
             html = (WEB / "templates" / "index.html").read_text(encoding="utf-8")
             html = html.replace("%%WAASS_TOKEN%%", TOKEN)
             html = html.replace("%%WAASS_PAGE%%", LIFECYCLE["page_id"])
+            # 版本号从 core.appinfo 取：模板里写死 v1.3.3 会在下一次提版本
+            # 的当天变成假话，而这一行是用户判断「要不要更新」的第一眼。
+            html = html.replace("%%WAASS_VERSION%%", appinfo.APP_VERSION)
             # 语言和整份键表在这里落地。键表内联而不是让前端再发一个请求：
             # 静态文案的填充在脚本一加载就跑，晚一步就会先闪一遍中文。
             lang = i18n.current()

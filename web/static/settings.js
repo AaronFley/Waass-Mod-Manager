@@ -46,8 +46,11 @@ async function openSettingsDialog() {
     || (S.data?.game_found ? T('set.auto_detected') : T('ui.unset'));
   const dirs = SET.downloads.dirs || [];
 
+  // 一行一个目录，右边只有一个动作：把这个位置的目录换成别的。
+  // 「移除」撤掉了 —— 把目录从列表里删掉，对「装 mod」这件事没有任何帮助，
+  // 删完还得再点「添加目录」加回来。真要用别的文件夹，直接换就行。
   const dirRows = dirs.map(d => `
-    <div class="set-row">
+    <div class="set-row set-row-dir">
       <div class="set-main">
         <div class="set-name">
           ${esc(d.name)}
@@ -57,7 +60,7 @@ async function openSettingsDialog() {
         <div class="set-path">${esc(d.path)}</div>
       </div>
       <span class="set-count">${TN('set.archives_one', 'set.archives_many', d.archives || 0)}</span>
-      <button class="btn btn-sm" data-rmdir="${esc(d.path)}">${T('set.remove')}</button>
+      <button class="btn btn-sm btn-primary" data-swapdir="${esc(d.path)}">${T('set.browse')}</button>
     </div>`).join('');
 
   const on = (k, dflt) => (cfg[k] === undefined ? dflt : !!cfg[k]);
@@ -69,7 +72,7 @@ async function openSettingsDialog() {
         <div class="stg-name">${esc(g.title)}
           <span class="stg-risk is-${g.risk}">${RISK_LABEL()[g.risk] || ''}</span>
         </div>
-        <div class="stg-desc">${esc(g.desc)}</div>
+        <div class="stg-desc" title="${esc(g.desc)}">${esc(g.desc)}</div>
       </div>
       <span class="stg-size">${fmtSize(g.bytes)}<em>${TN('set.files_one', 'set.files_many', g.files)}</em></span>
       ${g.actionable === false ? '' : `<button class="btn btn-sm" data-stg="${g.id}">${T('set.clean')}</button>`}
@@ -91,31 +94,23 @@ async function openSettingsDialog() {
 
       <div>
         <div class="set-sec-title">${T('set.downloads_title')}</div>
-        <div class="pkg-hint" style="margin-top:-2px">
-          ${T('set.downloads_hint')}
-        </div>
+        <div class="pkg-hint set-hint-line">${T('set.downloads_hint')}</div>
         <div id="setDirs">${dirRows || `<div class="pkg-hint">${T('set.dirs_empty')}</div>`}</div>
-        <div class="set-actions" style="margin-top:8px">
-          <button class="btn btn-sm btn-primary" id="setAddDir">${T('set.add_dir')}</button>
-          <button class="btn btn-sm" id="setPickDir">${T('set.browse')}</button>
-          <button class="btn btn-sm btn-ghost" id="setResetDir">${T('set.restore_defaults')}</button>
-        </div>
-        <div class="inst-hint" style="margin-top:6px" id="setAddManualWrap">
-          ${T('set.paste_path')}<input id="setAddManual" class="inst-input" style="height:28px;margin-top:5px"
-            placeholder="${T('set.paste_path_ph')}">
-        </div>
       </div>
 
       <div>
-        <div class="set-sec-title">${T('set.nexus_section')}</div>
+        <!-- 两个开关原来各挂一段常驻说明（一行 90 字），每次进设置都要读一遍。
+             说明搬到 ? 里：想知道细节的点开看，不想知道的直接勾。 -->
+        <div class="set-sec-title">${T('set.nexus_section')}
+          <button class="sec-help" id="nexusHelp" title="${T('set.nexus_help_title')}">?</button>
+        </div>
         <label class="set-check">
           <input type="checkbox" id="optNexusMeta" ${on('nexus_auto_meta', true) ? 'checked' : ''}>
-          <div>${T('set.nexus_auto_meta_label')}
-            <small>${T('set.nexus_auto_meta_hint')}</small></div>
+          <div>${T('set.nexus_auto_meta_label')}</div>
         </label>
         <label class="set-check">
           <input type="checkbox" id="optNexusCover" ${on('nexus_auto_cover', true) ? 'checked' : ''}>
-          <div>${T('set.nexus_cover_label')}<small>${T('set.nexus_cover_hint')}</small></div>
+          <div>${T('set.nexus_cover_label')}</div>
         </label>
         <div class="set-fixed">
           ${T('set.nexus_cached', { n: ABOUT?.nexus?.cached ?? 0 })}
@@ -125,7 +120,9 @@ async function openSettingsDialog() {
       </div>
 
       <div>
-        <div class="set-sec-title">${T('set.storage_section')}</div>
+        <div class="set-sec-title">${T('set.storage_section')}
+          <button class="sec-help" id="stgHelp" title="${T('set.storage_help_title')}">?</button>
+        </div>
         <div class="stg-head">
           <div>
             <div class="stg-total">${fmtSize(STG?.total_bytes || 0)}</div>
@@ -137,8 +134,10 @@ async function openSettingsDialog() {
         </div>
         <div class="set-path" title="${esc(STG?.data_dir || '')}">${esc(STG?.data_dir || '')}</div>
         <div class="stg-list">${stgRows || `<div class="pkg-hint">${T('set.storage_empty')}</div>`}</div>
+        <!-- 常驻只留数字。「这些是程序的大脑，任何清理都不会碰」那句进 ? ——
+             它说的是「不会误删」，那是点清理之前才需要知道的。 -->
         <div class="stg-core">
-          ${T('set.storage_core', { size: fmtSize(STG?.core_bytes || 0) })}
+          ${T('set.storage_core_size', { size: fmtSize(STG?.core_bytes || 0) })}
         </div>
       </div>
 
@@ -191,6 +190,14 @@ async function openSettingsDialog() {
   /* ---- 帮助 ---- */
   $('#setGuide').onclick = () => openGuide();
 
+  /* ---- 区块说明：标题右侧的 ? ---- */
+  const bindHelp = (id, titleKey, bodyKey) => {
+    const b = $('#' + id);
+    if (b) b.onclick = () => openSheet(T(titleKey), `<p class="sheet-lead">${T(bodyKey)}</p>`);
+  };
+  bindHelp('nexusHelp', 'set.nexus_help_title', 'set.nexus_help_body');
+  bindHelp('stgHelp', 'set.storage_help_title', 'set.storage_help_body');
+
   /* ---- 游戏目录 ---- */
   $('#setGameDir').onclick = async () => {
     const picked = await api('/api/pick-file', { kind: 'dir' }).catch(e => ({ error: e.message }));
@@ -211,41 +218,26 @@ async function openSettingsDialog() {
     } catch (e) { toast(T('set.save_failed', { msg: e.message }), 4000); }
   };
 
-  /* ---- 下载目录 ---- */
-  const addDir = async (path) => {
-    if (!path) return;
-    try {
-      await api('/api/settings', { action: 'add_dir', path });
-      toast(T('set.added'));
-      refreshMainSoon();
-      openSettingsDialog();
-    } catch (e) { toast(T('set.add_failed', { msg: e.message }), 4000); }
-  };
+  /* ---- 下载目录 ----
+     只剩一个动作：把这一行的目录换成别的目录。
+     「添加 / 恢复默认 / 粘贴路径」是给「配置界面」设计的，普通用户只是想
+     让程序从自己放包的那个文件夹里读 —— 一个按钮够了。
 
-  $('#setAddDir').onclick = () => addDir($('#setAddManual').value.trim());
-  $('#setPickDir').onclick = async () => {
-    const r = await api('/api/pick-file', { kind: 'dir' }).catch(e => ({ error: e.message }));
-    if (r.path) return addDir(r.path);
-    if (r.error) toast(r.error, 3500);
-  };
-  $('#setResetDir').onclick = async () => {
-    await api('/api/settings', { action: 'reset_dirs' });
-    toast(T('set.dirs_restored'));
-    refreshMainSoon();
-    openSettingsDialog();
-  };
-  $('#setAddManual').addEventListener('keydown', e => {
-    if (e.key === 'Enter') addDir(e.target.value.trim());
-  });
-
-  $$('#setDirs [data-rmdir]').forEach(b => {
+     先加新的再删旧的：删失败最多多出一项，不会把已有配置弄丢。 */
+  $$('#setDirs [data-swapdir]').forEach(b => {
     b.onclick = async () => {
-      const p = b.dataset.rmdir;
-      if (!confirm(T('set.confirm_remove_dir', { path: p }))) return;
-      await api('/api/settings', { action: 'remove_dir', path: p });
-      toast(T('set.removed'));
-      refreshMainSoon();
-      openSettingsDialog();
+      const old = b.dataset.swapdir;
+      const r = await api('/api/pick-file', { kind: 'dir' }).catch(e => ({ error: e.message }));
+      if (r.error) { toast(r.error, 3500); return; }
+      const p = String(r.path || '').trim();
+      if (!p || p.toLowerCase() === String(old).toLowerCase()) return;
+      try {
+        await api('/api/settings', { action: 'add_dir', path: p });
+        await api('/api/settings', { action: 'remove_dir', path: old }).catch(() => { /* 旧的删不掉不影响用 */ });
+        toast(T('set.dir_swapped'));
+        refreshMainSoon();
+        openSettingsDialog();
+      } catch (e) { toast(T('set.add_failed', { msg: e.message }), 4000); }
     };
   });
 
